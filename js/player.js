@@ -420,8 +420,10 @@
 
     hasWeapon(id) { return this.weapons.some(w => w.id === id); }
     slots() { return this.perks.includes('mule') ? 3 : 2; }
+    // Max Ammo: every gun full (mags too, so no reload needed) and grenades back up to 4
     refillAmmo() {
-      for (const w of this.weapons) w.reserve = DW.WEAPONS[w.id].reserve;
+      for (const w of this.weapons) { w.reserve = DW.WEAPONS[w.id].reserve; w.mag = DW.WEAPONS[w.id].mag; }
+      this.reloading = false;
       this.grenades = Math.max(this.grenades, 4);
     }
     // ammo resupply station: full mags and reserves on every gun
