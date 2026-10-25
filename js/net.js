@@ -147,12 +147,35 @@
       for (const k in n) if (k !== Net.myId) Net.names[k] = n[k];
     } catch (e) { /* ignore */ }
     Net.members = info.members.map(id => ({ id, name: Net.persona(id) }));
-    if (!Net.isHost() && info.data) {
-      if (info.data.map && DW.Maps.MAPS[info.data.map]) DW.mapId = info.data.map;
-      if (info.data.diff !== undefined && info.data.diff !== '') DW.diffId = DW.clamp(+info.data.diff | 0, 0, 3);
-    }
+    if (!Net.isHost() && info.data) applyConfig(info.data.map, info.data.diff, +info.data.cfgv || 0);
     return true;
   }
+
+  // Host's map/difficulty choice. It arrives two ways (lobby data and a direct message); each change
+  // carries a version so a stale copy can never undo a newer one.
+  Net.cfgSeen = -1;
+  function applyConfig(map, diff, ver) {
+    if (ver < Net.cfgSeen) return false;
+    Net.cfgSeen = ver;
+    let changed = false;
+    if (map && DW.Maps.MAPS[map] && DW.mapId !== map) { DW.mapId = map; changed = true; }
+    if (diff !== undefined && diff !== '' && DW.diffId !== DW.clamp(+diff | 0, 0, 3)) { DW.diffId = DW.clamp(+diff | 0, 0, 3); changed = true; }
+    return changed;
+  }
+  const configMsg = () => ({ map: DW.mapId, diff: DW.diffId, v: Net.cfgVer });
+  Net.cfgVer = 0;
+
+  // In the lobby, re-read the Steam lobby every 2 s in case an update callback was missed.
+  setInterval(async () => {
+    if (!api || !Net.lobbyId || Net.inMatch) return;
+    let info;
+    try { info = await api.lobby(); } catch (e) { return; }
+    if (!info || !Net.lobbyId) return;
+    const before = DW.mapId + '|' + DW.diffId + '|' + Net.hostId + '|' + Net.members.map(m => m.id).join(',');
+    applyInfo(info);
+    const after = DW.mapId + '|' + DW.diffId + '|' + Net.hostId + '|' + Net.members.map(m => m.id).join(',');
+    if (before !== after) emit('lobby_updated');
+  }, 2000);
 
   function onLobby(ev) {
     if (!Net.lobbyId) return;
@@ -180,7 +203,8 @@
   Net.hostLobby = async () => {
     if (!api) { emit('lobby_error', "Steam isn't running, so co-op is unavailable."); return; }
     try {
-      const info = await api.createLobby({ name: Net.myName + "'s game", map: DW.mapId, diff: String(DW.diffId), state: 'lobby', names: JSON.stringify({ [Net.myId]: Net.myName }) });
+      Net.cfgVer = 0;
+      const info = await api.createLobby({ name: Net.myName + "'s game", map: DW.mapId, diff: String(DW.diffId), cfgv: '0', state: 'lobby', names: JSON.stringify({ [Net.myId]: Net.myName }) });
       applyInfo(info);
       emit('lobby_updated');
     } catch (e) { emit('lobby_error', "Couldn't create a lobby: " + (e.message || e)); }
@@ -194,6 +218,7 @@
   Net.joinLobby = async id => {
     if (!api) return;
     try {
+      Net.cfgSeen = -1;
       const info = await api.joinLobby(String(id));
       applyInfo(info);
       Net.sendAll('hello', { name: Net.myName });
@@ -212,7 +237,9 @@
   Net.inviteFriends = () => { if (api && Net.lobbyId) api.invite(); };
   Net.pushConfig = () => {
     if (!api || !Net.lobbyId || !Net.isHost()) return;
-    api.setData({ map: DW.mapId, diff: String(DW.diffId), state: Net.inMatch ? 'ingame' : 'lobby' });
+    Net.cfgVer++;
+    api.setData({ map: DW.mapId, diff: String(DW.diffId), cfgv: String(Net.cfgVer), state: Net.inMatch ? 'ingame' : 'lobby' });
+    Net.sendAll('cfg', configMsg()); // direct to everyone too, in case the lobby data update is slow or missed
   };
   Net.startMatch = () => {
     const cfg = { map: DW.mapId, diff: DW.diffId, seed: Math.floor(Math.random() * 1e9), players: Net.memberIds() };
@@ -259,7 +286,13 @@
         for (const m of Net.members) if (m.id === sender) m.name = Net.names[sender];
         if (Net.isHost()) pushNames();
       }
+      if (Net.isHost()) Net.sendTo(sender, 'cfg', configMsg()); // a new player gets the current choice straight away
       emit('lobby_updated');
+    } else if (type === 'cfg') {
+      if (sender === Net.hostId && data && !Net.isHost()) {
+        applyConfig(data.map, data.diff, +data.v || 0);
+        emit('lobby_updated');
+      }
     } else if (type === 'start') {
       if (sender === Net.hostId && data) {
         Net.inMatch = true;
