@@ -24,8 +24,11 @@
     resize();
     DW.applySettings();
 
-    canvas.addEventListener('mousedown', () => {
-      if (world && !world.gameOver && !world.hud.isPaused() && !DW.Input.locked) DW.Input.lock(canvas);
+    // any click in a running match captures the mouse (not clicks on menu buttons or sliders)
+    window.addEventListener('mousedown', e => {
+      if (!world || world.gameOver || world.hud.isPaused() || DW.Input.locked) return;
+      if (e.target.closest && e.target.closest('button, input, select, .overlay')) return;
+      DW.Input.lock(canvas);
     });
     DW.Input.onLockChange = locked => {
       if (!world || world.gameOver) return;

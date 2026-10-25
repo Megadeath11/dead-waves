@@ -25,7 +25,7 @@
         <div class="centermsg"></div>
         <div class="down"></div>
         <div class="scoreboard panel"><div class="title">SCOREBOARD</div><table></table></div>
-        <div class="clickhint">Click to play</div>`;
+        <div class="clickhint">CLICK TO PLAY</div>`;
       const q = s => el.querySelector(s);
       this.vignette = q('.vignette'); this.scope = q('.scope'); this.dot = q('.dot'); this.hitmark = q('.hitmark');
       this.dmgDir = q('.dmgdir'); this.ammoHint = q('.ammo-hint'); this.waveL = q('.wave'); this.puL = q('.pu');
@@ -147,7 +147,7 @@
       const showScore = DW.Input.action('scoreboard') && !w.gameOver;
       this.scorePanel.style.display = showScore ? '' : 'none';
       if (showScore) this.fillScoreboard(this.scoreTable);
-      this.clickHint.style.display = !DW.Input.locked && !this.pausePanel && !w.gameOver && !DW.botActive ? '' : 'none';
+      this.clickHint.style.display = !DW.Input.locked && !this.pausePanel && !w.gameOver && !DW.botActive ? 'block' : 'none';
     }
 
     fillScoreboard(table) {

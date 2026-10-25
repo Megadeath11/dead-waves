@@ -67,7 +67,8 @@
   .panel { background: rgba(13, 11, 11, 0.9); border: 1px solid rgb(77, 18, 13); border-bottom-width: 2px; border-radius: 2px; padding: 18px 22px; }
 
   /* ---------- HUD */
-  .hud { position: absolute; inset: 0; pointer-events: none; }
+  /* must beat '#ui > *' or the HUD swallows the click that captures the mouse */
+  #ui > .hud { position: absolute; inset: 0; pointer-events: none; }
   .hud .overlay, .hud .overlay * { pointer-events: auto; }
   .hud div { paint-order: stroke fill; }
   .vignette { position: absolute; inset: 0; opacity: 0;
@@ -131,7 +132,7 @@
   .hud table td { padding: 3px 34px 3px 0; -webkit-text-stroke: 0; }
   .hud table tr.head td { color: var(--dim); font-size: 18px; }
   .hud table tr.me td:first-child { color: var(--gold); }
-  .clickhint { position: absolute; left: 0; right: 0; top: 58%; text-align: center; font-size: 26px; color: var(--bone); -webkit-text-stroke: 4px rgba(0,0,0,.9); display: none; }
+  .clickhint { position: absolute; left: 0; right: 0; top: 58%; text-align: center; font-size: 34px; font-weight: 800; letter-spacing: 2px; color: var(--bone); -webkit-text-stroke: 4px rgba(0,0,0,.9); display: none; }
   .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
   .overlay.dim { background: rgba(0,0,0,.6); }
   .overlay.red { background: rgba(13,0,0,.75); }
