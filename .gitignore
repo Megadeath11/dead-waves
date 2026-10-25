@@ -1,0 +1,6 @@
+dist/
+node_modules/
+old-godot-version/*.exe
+old-godot-version/*.dll
+.godot/
+/DeadWaves.exe

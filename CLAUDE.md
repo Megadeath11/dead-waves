@@ -1,0 +1,36 @@
+# Dead Waves — project notes for Claude
+
+CoD-Zombies-style wave shooter. **Electron + three.js (r149, `js/vendor/three.min.js`) + steamworks.js 0.4**, same stack as the owner's Tight-Opoly and Dust & Debt (boxer-drift). Steam on the Spacewar test app (**App ID 480**). The owner plays on Windows and wants games that are just an exe in a folder: no Godot, nothing to install.
+
+Ported from Godot 4.5 on 2026-10-23; the Godot project is kept in `old-godot-version/` for reference only.
+
+## Layout
+- `index.html` (all CSS) loads plain scripts in order; everything hangs off `window.DW`. No bundler, no modules.
+- `js/data.js` tables (guns, perks, difficulties), settings + stats in localStorage. `js/maps.js` ASCII maps + builder. `js/models.js` primitive-built models, `bake()` merges a node's plain meshes into one vertex-coloured mesh; `StaticBatch` merges all map scenery. `js/physics.js` AABB world (`Phys`: move/pushOut/raycast/hasLine) and `Nav` (0.5 m grid, multi-source Dijkstra flow field toward all living players; `steer()` for zombies). `js/world.js` match logic + co-op sync, `js/player.js`, `js/zombie.js`, `js/hud.js` (DOM HUD), `js/main.js` (menus, loop, pointer lock), `js/net.js`, `js/sfx.js` (Web Audio synth), `js/bot.js`.
+- `tools/electron-main.js` + `tools/steam-preload.js` expose `window.steam` (lobby create/join/leave/data/list/invite, P2P send, packet batches) and `window.desktop` (copy, fullscreen, quit).
+
+## Gameplay rules worth knowing
+- No spread at all (owner's request): shots go along the exact centre ray, hip or ADS, moving or not. Recoil only kicks the view straight up. The crosshair is a dot (red on a zombie), hidden only behind the sniper scope. ADS height is computed per gun so the gun sits under the dot.
+- Gun is drawn in a second pass (`player.vmScene`) after clearing depth, so it never clips walls.
+- Lights: fixed pool (8 lamp lights assigned to the nearest lamps each frame + muzzle, explosion, 2 power-up lights). Never add/remove lights at runtime (three.js recompiles shaders).
+- Progression (owner felt top guns came too fast): wall guns M14 600 / Shotgun 1200 / MP5 1800 / AK 2600; Mystery Box 1950, shut until wave 5 (`BOX_UNLOCK_WAVE`), weighted odds (`BOX_WEIGHT`, Death Machine rarest).
+- Bosses (owner asked for harder): Brute max(6000, hp×16), Abomination max(5000, hp×13), ×1.6 per extra player; barely flinch; at 50% HP they enrage (35% faster, shorter ability cooldowns, bigger slam, triple acid). HUD has a bar per boss and a player health bar.
+- Downed players are never targeted (`allPlayers('target')`); solo Second Wind counts as down too. Anyone who gets back up gets 3 s of grace (`myGraceT` / remote `graceT`). With no target, zombies back away from downed/grace players (`fleePoints()`, zombie flee mode); game over uses `out` (down with no self-revive coming).
+- Metalness is scaled by 0.3 (no env map), ambient ×1.35 vs the Godot values.
+
+## Co-op
+Lobby owner is host: simulates zombies/waves/power-ups; clients simulate their own player and send hits. Packets: byte 0 = 0 + UTF-8 JSON `[type, data]`, or byte 0 = 1 + float32 zombie snapshot (`zs`, 15 Hz, unreliable). Names travel via `hello` messages and the host's `names` lobby data (steamworks.js can't read friend names). steamworks.js 0.4 has no lobby filters, so "Join co-op game" also offers invites and lobby codes; the open-games list may miss lobbies on busy Spacewar.
+
+## Leaderboards
+steamworks.js 0.4 has no leaderboard API, so the Steam boards from the Godot version are gone; the Leaderboards screen shows local runs. Bringing Steam boards back would need an FFI package (e.g. koffi) calling steam_api64's ISteamUserStats flat API.
+
+## Build / test
+- `bash tools/build-exe.sh` → `dist/DeadWaves-<ver>-portable.exe`; copy to `DeadWaves.exe` at the folder root. Builds in `~/dead-waves-build` (node_modules copied from `~/boxer-drift-build`, Electron 33.4.11 zip is cached, so it works offline).
+- `node tools/serve.js` → http://127.0.0.1:8650/ ; `.claude/launch.json` has it as `dead-waves`.
+- Bot: `?playtest&map=bunker&diff=1&seconds=600&speed=6&god=1` (`start_wave`, `skill`). Logs per-wave lines and `ISSUE [...]`. When the browser pane is hidden, rAF stops; the loop falls back to a timer while a bot runs (`DW.forceLoop = true` does the same for manual tests).
+- Co-op without Steam: two tabs `?fake=1001` / `?fake=1002` (BroadcastChannel + localStorage lobby).
+
+## Open items
+- Real Steam co-op between two PCs not yet tested with the Electron build (fake-Steam two-tab test passes: sync, kills, doors, leave/host-quit).
+- Veteran Brute hits (121) one-shot a 100 HP player, as in the Godot version.
+- No join-in-progress, no host migration.

@@ -1,0 +1,19 @@
+DEAD WAVES
+==========
+Double-click DeadWaves.exe to play. Nothing else to install.
+
+Solo works on its own. For co-op, have Steam open before you launch the game.
+(It runs on Steam's free "Spacewar" test app, 480, so Steam shows you as playing Spacewar.)
+
+Co-op: everyone needs DeadWaves.exe. One player clicks "Host co-op (Steam)" then
+"Invite friends" or "Copy code". The others open the game first, then accept the invite
+or click "Join co-op game" and paste the code.
+
+Controls
+  WASD move, Shift sprint, Ctrl/C crouch, Space jump
+  Left mouse fire, Right mouse aim (no spread: shots go exactly where the dot is)
+  R reload, 1/2/Q/mouse wheel switch gun, V knife, G grenade
+  E buy / open doors / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
+
+If Windows SmartScreen says "Windows protected your PC", click "More info"
+then "Run anyway" - the exe isn't code-signed.
