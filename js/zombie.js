@@ -47,6 +47,7 @@
       this.bodyRoot.scale.setScalar(this.s);
       this.rig = type === 'goonlord' ? M.wendygoon(this.bodyRoot, DW.rng(id * 7919 + 13)) : M.zombie(this.bodyRoot, type, DW.rng(id * 7919 + 13));
       this.lungeT = 0; this.lungeCd = 4; this.screechT = 10;
+      this.stareT = type === 'goonlord' ? DW.GOON_STARE : 0;
       M.bake(this.bodyRoot);
       world.scene.add(this.root);
       this.lastPos = this.pos.clone();
@@ -188,6 +189,17 @@
       const w = this.world;
       const tgt = w.nearestPlayer(this.pos);
       const pos = this.pos;
+      // the Goon Lord's entrance: it stands dead still, turned toward you, before it charges
+      if (this.stareT > 0) {
+        this.stareT -= dt;
+        if (tgt) this.yaw = DW.lerpAngle(this.yaw, Math.atan2(-(tgt.pos.x - pos.x), -(tgt.pos.z - pos.z)), Math.min(1, dt * 4));
+        this.vel.set(0, this.onFloor ? -0.5 : this.vel.y - 18 * dt, 0);
+        this.onFloor = w.phys.move(pos, this.vel, this.colR, 1.5 * this.s, dt);
+        this.animate(dt, 0);
+        this.rig.head.rotation.x = -0.15;
+        if (this.stareT <= 0) { this.swing = 1; this.lungeCd = 0.4; }
+        return;
+      }
       let mx = 0, mz = 0;
       let dist = 999;
       let tp = pos;
@@ -305,7 +317,8 @@
         this.lungeT = 0.55;
         this.lungeCd = rage ? DW.randf(3.5, 5) : DW.randf(6, 8);
         this.swing = 1;
-        DW.Sfx.play3d('growl_boss', [this.pos.x, this.pos.y + 3, this.pos.z], 6, 0.55, 90);
+        DW.Sfx.play3d('shriek', [this.pos.x, this.pos.y + 3, this.pos.z], 4, 1.35, 90);
+        if (this.pos.distanceTo(w.player.pos) < 16) w.camShake = Math.max(w.camShake || 0, 0.6);
       }
       this.screechT -= dt;
       if (this.screechT <= 0) {

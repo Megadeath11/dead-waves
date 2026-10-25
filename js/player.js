@@ -166,7 +166,16 @@
 
     syncCamera() {
       this.camera.position.set(this.pos.x, this.pos.y + (this.pivotY || 1.65), this.pos.z);
-      this.camera.rotation.set(this.pitch, this.yaw, 0);
+      // screen shake moves the camera and rolls it, but never changes where it points,
+      // so the dot and your shots stay lined up
+      const sh = Math.min(this.world.camShake || 0, 1.5);
+      let roll = 0;
+      if (sh > 0) {
+        const j = () => (Math.random() * 2 - 1) * 0.07 * sh;
+        this.camera.position.x += j(); this.camera.position.y += j(); this.camera.position.z += j();
+        roll = (Math.random() * 2 - 1) * 0.04 * sh;
+      }
+      this.camera.rotation.set(this.pitch, this.yaw, roll);
       this.camera.updateMatrixWorld();
     }
 

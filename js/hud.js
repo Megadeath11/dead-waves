@@ -12,6 +12,8 @@
       document.getElementById('ui').appendChild(el);
       el.innerHTML = `
         <div class="vignette"></div>
+        <div class="scare"></div>
+        <div class="scareflash"></div>
         <div class="scope"><div class="scope-h"></div><div class="scope-v"></div></div>
         <div class="dot"></div>
         <div class="hitmark">X</div>
@@ -30,6 +32,7 @@
         <div class="scoreboard panel"><div class="title">SCOREBOARD</div><table></table></div>
         <div class="clickhint">CLICK TO PLAY</div>`;
       const q = s => el.querySelector(s);
+      this.scareEl = q('.scare'); this.scareFlashEl = q('.scareflash'); this.flashT = 0; this.pulseT = 0;
       this.vignette = q('.vignette'); this.scope = q('.scope'); this.dot = q('.dot'); this.hitmark = q('.hitmark');
       this.dmgDir = q('.dmgdir'); this.ammoHint = q('.ammo-hint'); this.waveL = q('.wave'); this.puL = q('.pu');
       this.bossBox = q('.bosses'); this.bossRows = [];
@@ -64,6 +67,11 @@
       let va = DW.clamp(Math.max(this.dmgAlpha, p.hp < p.maxHp * 0.6 ? low * 0.8 : 0), 0, 1);
       if (p.downed) va = 0.85;
       this.vignette.style.opacity = va.toFixed(3);
+      // Goon Lord: darkness closes in from the edges as it gets near, pulsing with the heartbeat
+      this.pulseT = Math.max(this.pulseT - dt * 3, 0);
+      this.flashT = Math.max(this.flashT - dt * 1.6, 0);
+      this.scareEl.style.opacity = DW.clamp((w.scare || 0) * 0.8 + this.pulseT * 0.25, 0, 1).toFixed(3);
+      this.scareFlashEl.style.opacity = this.flashT.toFixed(3);
       this.dmgDirT = Math.max(this.dmgDirT - dt * 1.2, 0);
       this.dmgDir.style.opacity = this.dmgDirT.toFixed(3);
       this.hitT = Math.max(this.hitT - dt * 4, 0);
@@ -304,12 +312,16 @@
       this.interactBar.style.display = progress > 0 ? 'block' : 'none';
       this.interactFill.style.width = (progress * 100).toFixed(1) + '%';
     }
-    centerMsg(text, color = RED, dur = 2.5) {
+    // scary: shaking, flickering horror lettering (Goon Lord)
+    centerMsg(text, color = RED, dur = 2.5, scary = false) {
       this.centerL.textContent = text;
       this.centerL.style.color = UI.rgb(color);
       this.centerL.style.opacity = '1';
+      this.centerL.classList.toggle('scary', !!scary);
       this.centerT = dur;
     }
+    scareFlash(k) { this.flashT = Math.max(this.flashT, k); }
+    heartPulse(k) { this.pulseT = Math.max(this.pulseT, 0.4 + k); }
     hitMarker(head, kill = false, crit = false) {
       this.hitT = 1;
       this.hitmark.style.color = UI.rgb(kill ? RED : crit ? [1.0, 0.55, 0.1] : head ? GOLD : [1, 1, 1]);

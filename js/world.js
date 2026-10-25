@@ -70,6 +70,11 @@
       this.mySkip = false;
       this.sentries = [];
       this.sentrySeq = 1;
+      this.goonSeen = new Set();
+      this.goonIntro = null;
+      this.flicker = 0;
+      this.camShake = 0;
+      this.scare = 0;
       this.myPing = 0;
       this.pingT = 0;
       this.waveTotal = 0;
@@ -144,7 +149,8 @@
       this.puLights = [new THREE.PointLight(0xffffff, 0, 4, 1.3), new THREE.PointLight(0xffffff, 0, 4, 1.3)];
       this.remoteLight = new THREE.PointLight(0xffcc73, 0, 6, 1.5); // teammates' muzzle flashes
       this.darkLight = new THREE.PointLight(0x8fb4ff, 0, 7, 1.6);     // faint glow around you when the lights are out
-      s.add(this.darkLight);
+      this.goonLight = new THREE.PointLight(0xcfe6ff, 0, 6, 1.5);     // cold light on the Goon Lord's face
+      s.add(this.darkLight, this.goonLight);
       s.add(this.muzzleLight, this.boomLight, this.remoteLight, ...this.puLights);
     }
 
@@ -171,8 +177,9 @@
     updateLights(dt) {
       const cam = this.player.camera.position;
       // the Goon Lord puts out almost every light while it lives
-      const goon = [...this.zombies.values()].some(z => z.ztype === 'goonlord' && !z.dead);
-      this.darkness = DW.moveToward(this.darkness, goon ? 1 : 0, dt * (goon ? 0.5 : 0.8));
+      const goon = [...this.zombies.values()].some(z => z.ztype === 'goonlord' && !z.dead) || (this.goonIntro && this.goonIntro.t >= 2.6);
+      this.darkness = DW.moveToward(this.darkness, goon ? 1 : 0, dt * (goon ? 3 : 0.8));
+      const flick = this.flicker > 0;
       const dk = this.darkness, def = this.mapDef;
       this.ambient.intensity = def.ambient_energy * 1.35 * (1 - 0.8 * dk);
       if (this.moon) this.moon.intensity = def.moon * (1 - 0.9 * dk);
@@ -197,7 +204,16 @@
         // in the dark only the nearest lamp survives, and it flickers
         const flicker = i === 0 ? (Math.sin(this.elapsed * 23) * Math.sin(this.elapsed * 7.3) > 0.3 ? 0.15 : 0.6) : 0.04;
         L.intensity = l.energy * fade * (1 - dk + dk * flicker);
+        // the build-up before the Goon Lord: every lamp strobes and stutters
+        if (flick) L.intensity *= Math.random() < 0.45 ? 0.02 : 1.4;
       }
+      if (flick) this.ambient.intensity *= Math.random() < 0.3 ? 0.3 : 1;
+      const gl = [...this.zombies.values()].find(z => z.ztype === 'goonlord' && !z.dead && z.riseT <= 0);
+      if (gl) {
+        gl.rig.head.getWorldPosition(_b);
+        this.goonLight.position.set(_b.x - Math.sin(gl.yaw) * 1.1, _b.y + 0.2, _b.z - Math.cos(gl.yaw) * 1.1);
+        this.goonLight.intensity = 1.6;
+      } else this.goonLight.intensity = 0;
       const p = this.player;
       p.forward(_a);
       this.muzzleLight.position.set(cam.x + _a.x * 1.0, cam.y - 0.1 + _a.y, cam.z + _a.z * 1.0);
@@ -247,6 +263,7 @@
       this.updateLifts(dt);
       this.updateSentries(dt);
       this.updatePing(dt);
+      this.updateGoonFx(dt);
       this.updateFx(dt);
       if (DW.Input.justPressed('skip')) this.voteSkip();
       if (this.online) {
@@ -364,10 +381,8 @@
       this.wave = n;
       this.state = 'wave';
       Sfx.play('wave_start', 2);
-      if (goon) {
-        this.hud.centerMsg(`WAVE ${n}\nTHE GOON LORD HAS RISEN\nThe lights are going out...`, [0.7, 0.95, 1.0], 5);
-        Sfx.play('growl_boss', 6, 0.45);
-      } else if (boss) this.hud.centerMsg(`WAVE ${n}\nBOSS INCOMING`, [1.0, 0.2, 0.15], 3.5);
+      if (goon) this.startGoonIntro(n);
+      else if (boss) this.hud.centerMsg(`WAVE ${n}\nBOSS INCOMING`, [1.0, 0.2, 0.15], 3.5);
       else this.hud.centerMsg(`WAVE ${n}`, [0.85, 0.1, 0.08], 2.5);
       if (this.player.dead) this.player.respawn(this.respawnPoint());
       if (n === DW.BOX_UNLOCK_WAVE && this.info.boxes.length) {
@@ -598,6 +613,73 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const out = [];
       for (const e of this.allPlayers('all')) if (!e.dead && (e.down || e.grace > 0)) out.push(e.pos);
       return out;
+    }
+
+    // ---------------------------------------------------------------- Goon Lord horror
+    // Build-up: music dies, a rumble swells, the lights strobe, then everything goes black.
+    startGoonIntro(n) {
+      Sfx.stopMusic();
+      Sfx.play('dread', 4);
+      Sfx.play('whisper', -2, 0.8);
+      this.goonIntro = { t: 0, n };
+      this.flicker = 2.6;
+      this.hud.centerMsg(`WAVE ${n}\nIT'S COMING...`, [0.85, 0.08, 0.05], 3, true);
+    }
+
+    // Runs on every player's game: intro timing, the reveal, heartbeat, whispers, screen shake.
+    updateGoonFx(dt) {
+      this.flicker = Math.max((this.flicker || 0) - dt, 0);
+      this.camShake = Math.max((this.camShake || 0) - dt * 1.3, 0);
+      if (this.goonIntro) {
+        const gi = this.goonIntro;
+        gi.t += dt;
+        if (gi.t >= 2.6 && !gi.dark) { gi.dark = true; Sfx.play('slam', 2, 0.5); this.camShake = Math.max(this.camShake, 0.4); }
+        if (gi.t > 12) this.goonIntro = null;
+      }
+      const goons = [...this.zombies.values()].filter(z => z.ztype === 'goonlord' && !z.dead);
+      // reveal: it has clawed out of the ground. It stares in silence, then shrieks and charges.
+      for (const g of goons) {
+        if (g.riseT > 0 || this.goonSeen.has(g.zid)) continue;
+        this.goonSeen.add(g.zid);
+        this.goonIntro = null;
+        this.hud.centerMsg('THE GOON LORD HAS RISEN', [0.85, 0.08, 0.05], 3.5, true);
+        this.hud.scareFlash(0.6);
+        Sfx.play('heartbeat', 4, 0.9);
+        this.fx.push(this.timer(DW.GOON_STARE, () => {
+          if (g.dead) return;
+          Sfx.play('shriek', 6);
+          Sfx.play3d('shriek', [g.pos.x, g.pos.y + 3, g.pos.z], 8, 0.9, 120);
+          this.camShake = 1.2;
+          this.hud.scareFlash(1);
+        }));
+      }
+      // proximity: heartbeat speeds up and the screen closes in as it gets near
+      let d = 99;
+      for (const g of goons) d = Math.min(d, g.pos.distanceTo(this.player.pos));
+      this.scare = goons.length ? DW.clamp(1 - d / 24, 0, 1) : 0;
+      if (goons.length) {
+        this.heartT = (this.heartT || 0) - dt;
+        if (this.heartT <= 0) {
+          this.heartT = DW.lerp(1.15, 0.36, this.scare);
+          Sfx.play('heartbeat', -12 + 15 * this.scare, 0.95 + this.scare * 0.15);
+          this.hud.heartPulse(this.scare);
+        }
+        this.whisperT = (this.whisperT === undefined ? 6 : this.whisperT) - dt;
+        if (this.whisperT <= 0) {
+          this.whisperT = DW.randf(6, 13);
+          Sfx.play('whisper', -6 + 4 * this.scare, DW.randf(0.75, 1.15));
+        }
+        if (this.scare > 0.75) this.camShake = Math.max(this.camShake, (this.scare - 0.75) * 0.8);
+        this.goonWasAlive = true;
+      } else if (this.goonWasAlive) {
+        this.goonWasAlive = false;
+        this.whisperT = undefined;
+        Sfx.startMusic(-14);
+      }
+    }
+
+    timer(t, fn) {
+      return dt => { t -= dt; if (t <= 0) { fn(); return false; } return true; };
     }
 
     // Goon Lord screech: a few runners claw out of the ground around it (host only)

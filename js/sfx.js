@@ -100,6 +100,39 @@
     const wb = [0];
     sounds.wind_blast = wav(0.9, t => lp(wb, 0.12 + 0.3 * Math.exp(-t * 6)) * Math.exp(-t * 4) * 1.4 + Math.sin(TAU * 55 * t) * Math.exp(-t * 7) * 0.5);
     sounds.melee_hit = wav(0.15, t => Math.sin(TAU * 90 * t) * Math.exp(-t * 25) * 0.8 + (Math.random() * 2 - 1) * Math.exp(-t * 40) * 0.4);
+    // --- Goon Lord horror sounds
+    // shriek: detuned screaming voices with a fast warble that climb then crack, plus raspy breath
+    const sk = [0];
+    sounds.shriek = wav(2.4, t => {
+      const env = Math.min(t * 6, 1) * Math.pow(Math.max(0, 1 - t / 2.4), 1.3);
+      const f = 620 + 900 * Math.min(t / 0.7, 1) - 260 * Math.max(0, t - 1.2);
+      const vib = Math.sin(TAU * 13 * t) * 40 + Math.sin(TAU * 31 * t) * 18;
+      let v = 0;
+      for (const [m, a] of [[1, 0.5], [1.013, 0.4], [0.497, 0.35], [1.51, 0.22], [2.02, 0.12]]) {
+        const ph = (f + vib) * m * t;
+        v += (2 * fposmod(ph, 1) - 1) * a;
+      }
+      return (v * 0.32 + lp(sk, 0.55) * 0.55) * env;
+    });
+    // heartbeat: lub-dub
+    sounds.heartbeat = wav(0.5, t => {
+      const beat = (t0, f) => (t > t0 ? Math.sin(TAU * f * (t - t0)) * Math.exp(-(t - t0) * 28) : 0);
+      return (beat(0, 52) * 1.0 + beat(0.17, 44) * 0.7) * 0.95;
+    });
+    // dread: a 5 s sub-bass swell with a slowly rising, beating drone and wind
+    const dr = [0];
+    sounds.dread = wav(5.0, t => {
+      const env = Math.min(t / 3.5, 1) * Math.min((5 - t) * 3, 1);
+      const f = 38 + t * 5;
+      return (Math.sin(TAU * f * t) * 0.7 + Math.sin(TAU * (f * 1.02) * t) * 0.5 + Math.sin(TAU * f * 3.01 * t) * 0.12 + lp(dr, 0.03) * 2.2) * env * 0.75;
+    });
+    // whisper: breathy band of noise that rises and falls like a voice
+    const wh = [0], wh2 = [0];
+    sounds.whisper = wav(1.6, t => {
+      const n = lp(wh, 0.6) - lp(wh2, 0.08);
+      const syll = Math.max(0, Math.sin(TAU * 3.2 * t)) * Math.sin(Math.PI * t / 1.6);
+      return n * syll * 0.9;
+    });
   }
 
   S.init = () => {
