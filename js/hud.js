@@ -23,6 +23,7 @@
         <div class="tl"><div class="wave"></div><div class="zcount"></div><div class="pu"></div></div>
         <div class="putimers"></div>
         <div class="revivein"><div class="rtext"></div><div class="ibar"><div class="fill"></div></div></div>
+        <div class="bleed"><div class="btext"></div><div class="bbar"><div class="bfill"></div></div></div>
         <div class="bosses"></div>
         <div class="bl"><div class="team"></div><div class="perks"></div><div class="armor"><div class="armor-fill"></div><div class="armor-text"></div></div><div class="hp"><div class="hp-fill"></div><div class="hp-text"></div></div><div class="points">500</div><div class="popups"></div></div>
         <div class="br"><div class="weapon"></div><div class="ammo"></div><div class="nades"></div></div>
@@ -47,6 +48,7 @@
       this.centerL = q(".centermsg"); this.downL = q('.down'); this.scorePanel = q('.scoreboard'); this.scoreTable = q('.scoreboard table');
       this.clickHint = q('.clickhint');
       this.zcount = q('.zcount'); this.puTimers = q('.putimers'); this.markersEl = q('.markers');
+      this.bleedEl = q('.bleed'); this.bleedText = q('.bleed .btext'); this.bleedFill = q('.bleed .bfill');
       this.reviveIn = q('.revivein'); this.reviveInText = q('.revivein .rtext'); this.reviveInFill = q('.revivein .fill');
       this.puBoxes = {};
       this.markerPool = [];
@@ -108,14 +110,14 @@
       this.set(this.weaponL, 'wep', (tier ? `${gem} ${wd.name} ${gem}  ${DW.PAP_NAMES[tier]}` : wd.name) + (p.reloading ? '   [RELOADING]' : ''));
       this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
       this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
-      this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(wd.mag / 4) ? RED : BONE);
+      this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(DW.magOf(a) / 4) ? RED : BONE);
       const K = DW.Input.keyName;
       this.set(this.nadeL, 'nade', `Grenades: ${p.grenades} [${K('grenade')}]    Wind: ${p.wind.mag}/${DW.WIND_CHARGES} [${K('weapon_3')}]    Sentries: ${w.mySentries()}/${DW.SENTRY_MAX} [${K('sentry')}] ${DW.SENTRY_COST}`);
-      const lowMag = a.mag <= Math.max(1, Math.floor(wd.mag / 4));
+      const lowMag = a.mag <= Math.max(1, Math.floor(DW.magOf(a) / 4));
       let hint = '';
       if (p.dead || p.reloading || a.id === 'wind') hint = '';
       else if (a.mag === 0 && a.reserve === 0) hint = 'NO AMMO';
-      else if (lowMag && a.reserve > 0) hint = 'RELOAD  [R]';
+      else if (lowMag && a.reserve > 0) hint = `RELOAD  [${DW.Input.keyName('reload')}]`;
       else if (lowMag) hint = 'LOW AMMO';
       this.set(this.ammoHint, 'hint', hint);
       this.ammoHint.style.color = UI.rgb(a.reserve === 0 ? RED : GOLD);
@@ -144,10 +146,22 @@
       let down = '';
       if (w.gameOver) down = '';
       else if (p.downed) {
-        if (p.selfReviveT > 0) down = `Second Wind... getting up in ${Math.ceil(p.selfReviveT)}`;
-        else down = !w.solo ? `YOU ARE DOWN\nA teammate can revive you - bleed out in ${Math.ceil(p.bleedT)}` : 'YOU ARE DOWN';
+        down = p.selfReviveT > 0 ? 'SECOND WIND' : !w.solo ? 'YOU ARE DOWN\nA teammate can revive you' : 'YOU ARE DOWN';
       } else if (p.dead) down = 'Spectating - you respawn at the start of the next wave';
       this.set(this.downL, 'down', down);
+      // big timer bar while down: bleed-out countdown, or Second Wind getting you up
+      // (the green "X is reviving you" bar replaces it while someone holds the button on you)
+      const beingRevived = w.reviveIn && w.elapsed - w.reviveIn.t < 0.4;
+      const showBleed = p.downed && !w.gameOver && !beingRevived && (p.selfReviveT > 0 || p.bleedT > 0);
+      this.bleedEl.style.display = showBleed ? 'block' : 'none';
+      if (showBleed) {
+        const self = p.selfReviveT > 0;
+        const t = self ? p.selfReviveT : p.bleedT;
+        this.set(this.bleedText, 'bleed', self ? `GETTING UP  ${Math.ceil(t)}s` : `BLEEDING OUT  ${Math.ceil(t)}s`);
+        this.bleedFill.style.width = ((self ? 1 - t / 4 : t / 30) * 100).toFixed(1) + '%';
+        this.bleedEl.classList.toggle('self', self);
+        this.bleedEl.classList.toggle('urgent', !self && t < 10);
+      }
 
       // player health bar
       const hpf = p.dead ? 0 : DW.clamp(p.hp / p.maxHp, 0, 1);
@@ -229,8 +243,10 @@
       for (const r of w.remotes.values()) {
         if (!r.down || r.dead) continue;
         const reviving = r.reviveAt !== undefined && w.elapsed - r.reviveAt < 0.4;
-        const sub = reviving ? `REVIVING ${Math.round((r.reviveP || 0) * 100)}%` : `${Math.max(0, Math.ceil(r.bleedT || 0))}s - hold ${DW.Input.keyName('interact')} to revive`;
-        list.push({ x: r.posV.x, y: r.posV.y + 1.1, z: r.posV.z, icon: '+', text: `${r.name} DOWN`, sub, cls: reviving ? 'mk-revive' : 'mk-down' });
+        const left = Math.max(0, Math.ceil(r.bleedT || 0));
+        const sub = reviving ? `REVIVING ${Math.round((r.reviveP || 0) * 100)}%` : `${left}s left - hold ${DW.Input.keyName('interact')}`;
+        const bar = reviving ? DW.clamp(r.reviveP || 0, 0, 1) : DW.clamp((r.bleedT || 0) / 30, 0, 1);
+        list.push({ x: r.posV.x, y: r.posV.y + 1.1, z: r.posV.z, icon: '+', text: `${r.name} DOWN`, sub, bar, cls: (reviving ? 'mk-revive' : 'mk-down') + (!reviving && left < 10 ? ' urgent' : '') });
       }
       if (w.state === 'wave' && w.remaining() === 1 && w.zombies.size === 1) {
         const z = w.zombies.values().next().value;
@@ -238,9 +254,10 @@
       }
       while (this.markerPool.length < list.length) {
         const el = UI.el('div', 'marker');
-        el.innerHTML = '<div class="mk-icon"></div><div class="mk-text"></div><div class="mk-sub"></div><div class="mk-dist"></div>';
+        el.innerHTML = '<div class="mk-icon"></div><div class="mk-text"></div><div class="mk-bar"><div class="mk-fill"></div><div class="mk-sub"></div></div><div class="mk-dist"></div>';
         this.markersEl.appendChild(el);
-        this.markerPool.push({ el, icon: el.querySelector('.mk-icon'), text: el.querySelector('.mk-text'), sub: el.querySelector('.mk-sub'), dist: el.querySelector('.mk-dist') });
+        this.markerPool.push({ el, icon: el.querySelector('.mk-icon'), text: el.querySelector('.mk-text'), sub: el.querySelector('.mk-sub'), dist: el.querySelector('.mk-dist'),
+          bar: el.querySelector('.mk-bar'), fill: el.querySelector('.mk-fill') });
       }
       const v = new THREE.Vector3();
       this.markerPool.forEach((m, i) => {
@@ -261,6 +278,8 @@
         if (m.icon.textContent !== it.icon) m.icon.textContent = it.icon;
         if (m.text.textContent !== it.text) m.text.textContent = it.text;
         if (m.sub.textContent !== it.sub) m.sub.textContent = it.sub;
+        m.bar.style.display = it.bar !== undefined ? 'block' : 'none';
+        if (it.bar !== undefined) m.fill.style.width = (it.bar * 100).toFixed(1) + '%';
         const d = Math.round(Math.hypot(it.x - p.pos.x, it.z - p.pos.z)) + 'm';
         if (m.dist.textContent !== d) m.dist.textContent = d;
       });
@@ -357,10 +376,24 @@
       panel.appendChild(UI.settingsPanel());
       const row = UI.el('div', 'row center');
       row.appendChild(UI.button('Resume', () => this.resume()));
-      row.appendChild(UI.button('Quit to menu', () => w.quitMatch()));
+      row.appendChild(UI.button('Quit to menu', () => this.confirmQuit(panel)));
       panel.appendChild(row);
       this.el.appendChild(pp);
       w.setPaused(true);
+    }
+    // "are you sure?" swaps the pause panel's contents
+    confirmQuit(panel) {
+      const w = this.world;
+      panel.innerHTML = '';
+      panel.classList.add('confirm');
+      panel.appendChild(UI.el('div', 'h1 c', 'QUIT TO MENU?'));
+      const why = w.solo ? 'Your run ends here and counts as finished.'
+        : w.host ? "You're the host: the game ends for everyone." : 'You leave the game. Your squad keeps playing.';
+      panel.appendChild(UI.el('div', 'h3 c', why));
+      const row = UI.el('div', 'row center');
+      row.appendChild(UI.button('Yes, quit', () => w.quitMatch(), 'danger'));
+      row.appendChild(UI.button('Cancel', () => { this.pausePanel.remove(); this.pausePanel = null; this.openPause(); }));
+      panel.appendChild(row);
     }
     // Pause closes once the mouse is captured again (see main.js pointer-lock handling).
     resume() { DW.Input.lock(document.getElementById('game')); }

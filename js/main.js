@@ -256,7 +256,7 @@
     for (const m of DW.MAP_ORDER) {
       const def = Maps.MAPS[m];
       const best = DW.stats.best_wave[`${m}:${DW.diffId}`] | 0;
-      const b = UI.button('', () => { DW.mapId = m; Net.pushConfig(); showScreen(current); }, 'mapbtn');
+      const b = UI.button('', () => { DW.mapId = m; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'mapbtn');
       b.innerHTML = `<b>${def.name}</b><br><span>${def.desc}</span><br><span>Best wave: ${best > 0 ? best : '-'}</span>`;
       b.disabled = !editable;
       selectedStyle(b, m === DW.mapId);
@@ -266,7 +266,7 @@
     v.appendChild(UI.el('div', 'label', 'DIFFICULTY'));
     const drow = UI.el('div', 'row');
     DW.DIFFS.forEach((d, i) => {
-      const b = UI.button(d.name, () => { DW.diffId = i; Net.pushConfig(); showScreen(current); }, 'narrow');
+      const b = UI.button(d.name, () => { DW.diffId = i; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'narrow');
       b.title = d.desc;
       b.disabled = !editable;
       selectedStyle(b, i === DW.diffId);
@@ -418,10 +418,18 @@
   }
 
   // ---------------------------------------------------------------- lobby & match
+  // only redraw the lobby when something on it changed, and without the entry animation (it used to flash)
+  let lobbySig = '';
   function onLobbyUpdated() {
     if (world) return;
-    if (Net.isOnline()) showScreen('lobby');
-    else if (current === 'lobby') showScreen('main');
+    if (Net.isOnline()) {
+      const sig = [Net.lobbyId, Net.hostId, DW.mapId, DW.diffId, ...Net.members.map(m => m.id + ':' + Net.persona(m.id))].join('|');
+      if (current === 'lobby' && sig === lobbySig) return;
+      const again = current === 'lobby';
+      lobbySig = sig;
+      showScreen('lobby');
+      if (again) screen.classList.add('still');
+    } else if (current === 'lobby') { lobbySig = ''; showScreen('main'); }
   }
 
   function startMatch(cfg) {

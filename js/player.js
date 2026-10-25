@@ -7,6 +7,8 @@
   const WALK = 5.0, SPRINT = 7.8, CROUCH = 2.6, JUMP = 4.8, GRAV = 15.0;
   const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3();
 
+  const RSTYLE = { pistol: 'pistol', deagle: 'pistol', m14: 'rifle', mp5: 'rifle', ak: 'rifle', lmg: 'lmg', shotgun: 'shells', sniper: 'bolt', plasma: 'cells', minigun: 'box' };
+
   class Player {
     constructor(world) {
       this.world = world;
@@ -78,7 +80,7 @@
       this.buildGun();
     }
     switchTo(i, force = false) {
-      if (i < 0 || i >= this.weapons.length || (i === this.cur && !force)) return;
+      if (i < 0 || i >= this.weapons.length || (i === this.cur && !force && !this.windOut)) return; // from the wind charge, any slot key works, even the gun it was swapped from
       this.cur = i;
       this.windOut = false;
       this.reloading = false;
@@ -274,15 +276,15 @@
       p[1] += Math.abs(Math.sin(this.bobT)) * 0.012 * bob;
       p[2] += this.recoil * 0.012;
       if (this.sprinting) { p[0] -= 0.05; p[1] -= 0.05; p[2] += 0.05; }
-      if (this.reloading) p[1] -= 0.12;
+      const rot = [this.recoil * 0.02 * (1 - a * 0.7), 0, 0];
+      if (this.sprinting) { rot[0] -= 0.3; rot[1] += 0.6; rot[2] += 0.2; }
+      this.reloadPose(p, rot);
       p[1] -= this.switchT * 0.6;
       p[2] -= this.meleeAnim * 0.25;
       const k = Math.min(1, dt * 18);
       const g = this.gunRoot;
       g.position.set(DW.lerp(g.position.x, p[0], k), DW.lerp(g.position.y, p[1], k), DW.lerp(g.position.z, p[2], k));
-      const rot = [this.recoil * 0.02 * (1 - a * 0.7), 0, 0];
-      if (this.sprinting) { rot[0] -= 0.3; rot[1] += 0.6; rot[2] += 0.2; }
-      if (this.reloading) { rot[0] += 0.5; rot[2] += 0.3; }
+
       const kr = Math.min(1, dt * 14);
       g.rotation.set(DW.lerp(g.rotation.x, rot[0], kr), DW.lerp(g.rotation.y, rot[1], kr), DW.lerp(g.rotation.z, rot[2], kr));
       const scoped = wd.ads === 0 && this.adsAmt > 0.85;
@@ -392,15 +394,94 @@
 
     startReload() {
       const w = this.active(), wd = this.wdata();
-      if (this.reloading || w.mag >= wd.mag || w.reserve <= 0 || this.switchT > 0) return;
+      if (this.reloading || w.mag >= DW.magOf(w) || w.reserve <= 0 || this.switchT > 0) return;
       this.reloading = true;
-      this.reloadT = wd.reload * (this.perks.includes('fast') ? 0.5 : 1);
-      DW.Sfx.play('reload', -4);
+      this.reloadT = this.reloadTotal = wd.reload * (this.perks.includes('fast') ? 0.5 : 1);
+      this.reloadSfx = 0;
+      DW.Sfx.play('empty', -8, 0.8);
     }
+    // Reload animation, per gun: turn the gun in, then mag out/in + rack (pistols, rifles), drum and lid (LMG),
+    // bolt (Barrett), shells one by one + pump (shotgun), energy cells (Plasma Caster), ammo box (Death Machine).
+    // u runs 0..1 over the reload; p / rot are the gun's position and rotation offsets for this frame.
+    reloadPose(p, rot) {
+      const parts = this.gunParts || {}, lh = this.leftHand;
+      for (const k of ['mag', 'bolt', 'pump', 'lid', 'cells']) {
+        const o = parts[k];
+        if (o) { o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); o.visible = true; }
+      }
+      if (lh) lh.position.set(0, 0, 0);
+      if (!this.reloading || !this.reloadTotal) return;
+      const u = DW.clamp(1 - this.reloadT / this.reloadTotal, 0, 1);
+      const style = RSTYLE[this.active().id] || 'rifle';
+      const ease = x => x * x * (3 - 2 * x);
+      const seg = (a, b) => ease(DW.clamp((u - a) / (b - a), 0, 1));
+      const bump = (a, b) => Math.sin(DW.clamp((u - a) / (b - a), 0, 1) * Math.PI);
+      const tilt = seg(0, 0.14) * (1 - seg(0.88, 1));
+      const mag = parts.mag, bolt = parts.bolt;
+      const roll = { shells: 0.75, cells: 0.6, box: 0.2, lmg: 0.35 }[style] || 0.5;
+      p[0] -= 0.03 * tilt; p[1] -= 0.05 * tilt;
+      rot[0] += 0.25 * tilt; rot[2] += roll * tilt;
+      let sfx = [];
+      if (style === 'shells') {
+        // four shells pushed into the tube under the gun, then a pump
+        const n = 4, ph = DW.clamp((u - 0.14) / 0.64, 0, 1) * n, f = ph % 1, on = u > 0.14 && u < 0.78;
+        if (mag) { mag.visible = on; mag.position.set(0, -0.06 * (1 - ease(f)), 0.12 * (1 - ease(f))); }
+        if (lh && on) { lh.position.y = -0.05 * Math.sin(f * Math.PI); lh.position.z = 0.12 * (1 - ease(f)); }
+        if (on) rot[0] += 0.04 * Math.sin(f * Math.PI);
+        const pk = bump(0.8, 0.94);
+        if (parts.pump) parts.pump.position.z = 0.09 * pk;
+        if (lh) lh.position.z += 0.08 * pk;
+        sfx = [[0.25, 'reload', -10, 1.6], [0.41, 'reload', -10, 1.5], [0.57, 'reload', -10, 1.6], [0.73, 'reload', -10, 1.5], [0.82, 'empty', -4, 0.6], [0.9, 'empty', -4, 0.9]];
+      } else if (style === 'cells') {
+        // the glowing cells spin, pop out the back, and a fresh set slides in
+        const out = seg(0.14, 0.34), inn = seg(0.55, 0.78);
+        const cells = parts.cells;
+        if (cells) {
+          cells.rotation.z = u * 30;
+          if (u < 0.55) { cells.position.set(0, 0.12 * out, 0.1 * out); cells.visible = u < 0.4; }
+          else cells.position.set(0, 0.12 * (1 - inn), 0.1 * (1 - inn));
+        }
+        if (lh) lh.position.set(0, 0.1 * (seg(0.2, 0.4) - seg(0.55, 0.78)), 0.12 * (seg(0.2, 0.4) - seg(0.6, 0.8)));
+        sfx = [[0.2, 'wind', -12, 1.8], [0.7, 'pickup', -12, 1.4]];
+      } else {
+        // magazine out, new one in, then rack the slide / charging handle / bolt
+        const box = style === 'box', out = seg(0.15, 0.32), inn = seg(0.55, 0.75);
+        if (mag) {
+          const dx = box ? 0.12 : 0, dy = box ? -0.2 : style === 'lmg' ? -0.28 : -0.3;
+          if (u < 0.55) { mag.position.set(dx * out, dy * out, 0); mag.rotation.x = -0.4 * out; mag.visible = u < 0.4; }
+          else { mag.position.set(dx * (1 - inn), dy * (1 - inn), 0); mag.rotation.x = -0.3 * (1 - inn); }
+        }
+        if (lh) {
+          const away = seg(0.18, 0.4) * (1 - seg(0.55, 0.75));
+          lh.position.set(box ? 0.1 * away : 0, -0.28 * away, 0.05 * away);
+        }
+        if (style === 'lmg' && parts.lid) parts.lid.rotation.x = -1.1 * seg(0.06, 0.18) * (1 - seg(0.8, 0.9));
+        if (style === 'bolt' && bolt) {
+          // Barrett: bolt up and back before the mag, forward and down after
+          const open = seg(0.06, 0.16) * (1 - seg(0.8, 0.9));
+          bolt.rotation.z = -0.9 * open;
+          bolt.position.z = 0.08 * (seg(0.1, 0.18) * (1 - seg(0.78, 0.86)));
+        } else if (bolt) {
+          const k = bump(0.78, 0.9);
+          bolt.position.z = (style === 'pistol' ? 0.04 : 0.07) * k;
+          rot[0] += 0.07 * k;
+          if (lh) lh.position.x += 0.04 * k;
+        }
+        if (box && parts.mag) rot[1] -= 0.2 * tilt;
+        sfx = [[0.22, 'empty', -6, 0.6], [0.7, 'reload', -6, 1.1], [0.84, 'empty', -5, 1.4]];
+        if (style === 'bolt') sfx.unshift([0.12, 'empty', -5, 0.9]);
+      }
+      // the clicks of each step, played once as the reload passes them
+      while (this.reloadSfx < sfx.length && u >= sfx[this.reloadSfx][0]) {
+        const [, name, db, pitch] = sfx[this.reloadSfx++];
+        DW.Sfx.play(name, db, pitch);
+      }
+    }
+
     finishReload() {
       this.reloading = false;
       const w = this.active(), wd = this.wdata();
-      const take = Math.min(wd.mag - w.mag, w.reserve);
+      const take = Math.min(DW.magOf(w) - w.mag, w.reserve);
       w.mag += take;
       w.reserve -= take;
     }
@@ -409,8 +490,8 @@
       const wd = DW.WEAPONS[id];
       for (let i = 0; i < this.weapons.length; i++) {
         if (this.weapons[i].id === id) {
-          this.weapons[i].reserve = wd.reserve;
-          this.weapons[i].mag = wd.mag;
+          this.weapons[i].reserve = DW.reserveOf(this.weapons[i]);
+          this.weapons[i].mag = DW.magOf(this.weapons[i]);
           this.switchTo(i, true);
           return;
         }
@@ -428,8 +509,8 @@
     packAPunch() {
       const w = this.active(), wd = DW.WEAPONS[w.id];
       w.pap = Math.min(3, (w.pap | 0) + 1);
-      w.mag = wd.mag;
-      w.reserve = wd.reserve;
+      w.mag = DW.magOf(w);
+      w.reserve = DW.reserveOf(w);
       this.reloading = false;
       this.switchT = 0.6;
       this.buildGun();
@@ -440,13 +521,13 @@
     slots() { return this.perks.includes('mule') ? 3 : 2; }
     // Max Ammo: every gun full (mags too, so no reload needed) and grenades back up to 4
     refillAmmo() {
-      for (const w of this.weapons) { w.reserve = DW.WEAPONS[w.id].reserve; w.mag = DW.WEAPONS[w.id].mag; }
+      for (const w of this.weapons) { w.reserve = DW.reserveOf(w); w.mag = DW.magOf(w); }
       this.reloading = false;
       this.grenades = Math.max(this.grenades, 4);
     }
     // ammo resupply station: full mags and reserves on every gun
     refillAll() {
-      for (const w of this.weapons) { w.reserve = DW.WEAPONS[w.id].reserve; w.mag = DW.WEAPONS[w.id].mag; }
+      for (const w of this.weapons) { w.reserve = DW.reserveOf(w); w.mag = DW.magOf(w); }
       this.reloading = false;
     }
 
@@ -515,14 +596,17 @@
       M.box(gm, [0.0, -0.075, 0.03], [0.075, 0.08, 0.09], glove);
       M.box(gm, [0.05, -0.15, 0.24], [0.085, 0.09, 0.34], sleeve, [0.45, 0.25, 0]);
       M.box(gm, [0.025, -0.1, 0.1], [0.09, 0.095, 0.05], cuff, [0.45, 0.25, 0]);
+      // the support hand is its own node so the reload can move it
+      const lh = this.leftHand = M.joint(gm, [0, 0, 0]);
       if (length > 0.4 || id === 'plasma') {
         const fz = id !== 'plasma' ? -length * 0.48 : -0.22;
-        M.box(gm, [-0.01, -0.025, fz], [0.08, 0.07, 0.1], glove);
-        M.box(gm, [-0.07, -0.08, fz + 0.15], [0.08, 0.085, 0.28], sleeve, [0.3, -0.45, 0]);
+        M.box(lh, [-0.01, -0.025, fz], [0.08, 0.07, 0.1], glove);
+        M.box(lh, [-0.07, -0.08, fz + 0.15], [0.08, 0.085, 0.28], sleeve, [0.3, -0.45, 0]);
       } else {
-        M.box(gm, [-0.03, -0.07, 0.0], [0.06, 0.07, 0.08], glove);
-        M.box(gm, [-0.09, -0.15, 0.2], [0.085, 0.09, 0.32], sleeve, [0.45, -0.35, 0]);
+        M.box(lh, [-0.03, -0.07, 0.0], [0.06, 0.07, 0.08], glove);
+        M.box(lh, [-0.09, -0.15, 0.2], [0.085, 0.09, 0.32], sleeve, [0.45, -0.35, 0]);
       }
+      this.gunParts = g.userData;
       M.bake(g, false);
       this.muzzle = M.joint(gm, g.userData.muzzle);
       const fcol = id !== 'plasma' ? [1.0, 0.8, 0.35] : [0.4, 1.0, 0.5];
@@ -577,12 +661,11 @@
       this.downs += 1;
       this.reloading = false;
       this.adsAmt = 0;
+      // perks and guns are kept through a down (owner's rule); a revive costs one Pack-a-Poonch tier instead.
+      // Solo Second Wind is used up by the self-revive it gives.
       const hadWind = this.perks.includes('wind');
-      this.perks = [];
-      this.maxHp = 100;
+      if (hadWind && w.solo) this.perks = this.perks.filter(p => p !== 'wind');
       this.armor = 0;
-      // losing Mule Kick drops the third gun
-      if (this.weapons.length > 2) { this.weapons.length = 2; this.cur = Math.min(this.cur, 1); }
       const pd = DW.WEAPONS.pistol;
       this.downedWeapon = { id: 'pistol', mag: pd.mag, reserve: pd.mag * 3 };
       this.buildGun();
@@ -602,8 +685,16 @@
       this.hp = this.maxHp * 0.6;
       this.regenDelay = 1;
       this.world.onLocalRevive();
+      let lost = false;
+      for (const g of this.weapons) {
+        if (!(g.pap > 0)) continue;
+        g.pap--;
+        g.mag = Math.min(g.mag, DW.magOf(g));
+        g.reserve = Math.min(g.reserve, DW.reserveOf(g));
+        lost = true;
+      }
       this.buildGun();
-      this.world.hud.centerMsg('REVIVED', [0.5, 1.0, 0.5], 1.5);
+      this.world.hud.centerMsg(lost ? 'REVIVED\nPack-a-Poonch dropped a tier' : 'REVIVED', [0.5, 1.0, 0.5], lost ? 2.5 : 1.5);
       this.world.sendPstate(true);
     }
     bleedOut() {

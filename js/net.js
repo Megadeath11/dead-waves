@@ -195,7 +195,11 @@
     if (!api || !Net.lobbyId || !Net.isHost()) return;
     const n = { [Net.myId]: Net.myName };
     for (const m of Net.members) if (Net.names[m.id]) n[m.id] = Net.names[m.id];
-    api.setData({ names: JSON.stringify(n) });
+    // only write when it changed: every write fires a lobby update, which used to call this again (endless refresh loop)
+    const js = JSON.stringify(n);
+    if (js === Net.namesSent) return;
+    Net.namesSent = js;
+    api.setData({ names: js });
   }
 
   // ---------------------------------------------------------------- lobbies
@@ -204,6 +208,7 @@
     if (!api) { emit('lobby_error', "Steam isn't running, so co-op is unavailable."); return; }
     try {
       Net.cfgVer = 0;
+      Net.namesSent = '';
       const info = await api.createLobby({ name: Net.myName + "'s game", map: DW.mapId, diff: String(DW.diffId), cfgv: '0', state: 'lobby', names: JSON.stringify({ [Net.myId]: Net.myName }) });
       applyInfo(info);
       emit('lobby_updated');

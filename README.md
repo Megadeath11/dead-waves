@@ -17,8 +17,8 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 
 ## What's in it
 
-- **5 maps**: Outpost, Bunker, Factory, and the multi-level Harbor (container decks, crane platform, elevators) and Overpass (raised highway bridge, stair ramps, elevators). Buyable doors open new zones; zombies climb stairs after you.
-- **Late-game spending**: Pack-a-Poonch tiers I-III (20k / 40k / 60k for 4x / 6x / 9x damage), 7 perks (Mule Kick, Deadshot, Stamin-Up added), armour lockers, ammo resupply crates, and sentry turrets you place anywhere with T (8,000 each, up to 4 per player, 2 minutes each).
+- **7 maps**: Outpost, Bunker, Factory, the multi-level Harbor (container decks, crane platform, elevators) and Overpass (raised highway bridge, stair ramps, elevators), the open town Crossroads (four wide plazas and a long park), and Proving Grounds (one massive open field with every shop lined up on the north wall, no doors). Buyable doors open new zones; zombies climb stairs after you.
+- **Late-game spending**: Pack-a-Poonch tiers I-III (20k / 40k / 60k for 4x / 6x / 9x damage, and each tier doubles the magazine and ammo), 7 perks (Mule Kick, Deadshot, Stamin-Up added), armour lockers, ammo resupply crates, and sentry turrets you place anywhere with T (8,000 each, up to 4 per player, 2 minutes each).
 - **Jump crits**: headshots while you're in the air do double damage.
 - **30 s break between rounds**; everyone presses Enter to skip it.
 - **10 guns** with no spread: every bullet goes exactly where the dot is, standing, running or aiming. Wall-buys (M9, M14, Pump Shotgun, MP5, AK-47) and the **Mystery Box** (LMG, Desert Hawk, Barrett .50, Plasma Caster, Death Machine).
@@ -28,6 +28,8 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **Dodgers** (from wave 6): hooded zombies with cyan eyes that sidestep whenever someone aims at them. Lead your shots and fire between dodges.
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
+- **Reload animations** for every gun (mag swaps, shotgun shells and pump, Barrett bolt, plasma cells, Death Machine ammo box).
+- **Downs**: you keep your perks and guns when you're revived; each revive costs one Pack-a-Poonch tier on your guns. Big bleed-out and revive bars.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
 - **Settings** in five tabs: graphics (quality presets Low-Ultra, render resolution, shadows, lamp lights, particles, anti-aliasing, brightness, FOV, FPS limit and counter), audio (master / music / effects, mute when alt-tabbed), controls (sensitivity, aim sensitivity, invert Y, toggle aim / crouch), key bindings for every action, and HUD (crosshair colour and size, hit markers, point popups, HUD size, view bob, screen shake).
 - Local stats and best runs per map and difficulty.

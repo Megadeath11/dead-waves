@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.6.1';
+DW.VERSION = '2.7.0';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -13,7 +13,7 @@ DW.DIFFS = [
   { name: 'Veteran', hp: 1.8, dmg: 2.2, spd: 1.2, pts: 0.9, boss_every: 4, desc: 'Brutal. Bosses every 4 waves.' },
 ];
 
-DW.MAP_ORDER = ['outpost', 'bunker', 'factory', 'harbor', 'overpass'];
+DW.MAP_ORDER = ['outpost', 'bunker', 'factory', 'harbor', 'overpass', 'crossroads', 'proving'];
 
 // range in metres (damage halves past it). Every shot goes exactly where the crosshair points (no spread).
 DW.WEAPONS = {
@@ -57,6 +57,9 @@ DW.PAP_COST = DW.PAP_COSTS[1];
 DW.ARMOR_COST = 4000;     // armour locker: soaks this much damage before health
 DW.ARMOR_MAX = 150;
 DW.AMMO_COST = 5000;      // ammo resupply: refills every gun you carry
+// Pack-a-Poonch doubles a gun's magazine and reserve every tier (x2, x4, x8)
+DW.magOf = w => DW.WEAPONS[w.id].mag * (1 << (w.pap | 0));
+DW.reserveOf = w => DW.WEAPONS[w.id].reserve * (1 << (w.pap | 0));
 DW.SENTRY_COST = 8000;    // press T to place a sentry turret anywhere
 DW.SENTRY_MAX = 4;        // per player, at once
 DW.SENTRY_TIME = 120;     // seconds each one lasts

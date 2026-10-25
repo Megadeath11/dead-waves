@@ -809,7 +809,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const at = new THREE.Vector3(pos[0], pos[1] + 1.5, pos[2]);
       this.burst(at, col, 40, 4, 0.9);
       this.burst(at.clone(), [0.95, 1.0, 1.0], 25, 3, 0.9);
-      this.hud.centerMsg(`PACK-A-POONCHED${tier > 1 ? ' ' + 'I'.repeat(tier) : ''}!\n${DW.PAP_DMG[tier]}x damage`, col, 2.5);
+      this.hud.centerMsg(`PACK-A-POONCHED${tier > 1 ? ' ' + 'I'.repeat(tier) : ''}!\n${DW.PAP_DMG[tier]}x damage, ${1 << tier}x ammo`, col, 2.5);
     }
 
     onLocalRevive() {
@@ -1081,7 +1081,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           const what = tier === 0 ? 'Pack-a-Poonch' : `upgrade to tier ${'I'.repeat(tier + 1)}`;
           const look = ['', 'emerald', 'sapphire', 'amethyst & gold'][tier + 1];
           return {
-            text: `Press E to ${what} your ${wd.name}  [${cost}]\n${look} finish, ${DW.PAP_DMG[tier + 1]}x damage, full ammo`, cost,
+            text: `Press E to ${what} your ${wd.name}  [${cost}]\n${look} finish, ${DW.PAP_DMG[tier + 1]}x damage, ${1 << (tier + 1)}x mag and ammo`, cost,
             action: () => { if (p.spend(cost)) { p.packAPunch(); this.papFx(pa.pos, tier + 1); } },
           };
         }

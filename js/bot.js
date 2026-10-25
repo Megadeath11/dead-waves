@@ -197,7 +197,7 @@
     const a = p.active(), wd = DW.WEAPONS[a.id];
     if (!target || target.dead || !world.zombies.has(target.zid)) {
       release('fire', 'ads');
-      if (a.mag < wd.mag && a.reserve > 0 && !p.reloading) I.tap('reload');
+      if (a.mag < DW.magOf(a) && a.reserve > 0 && !p.reloading) I.tap('reload');
       return;
     }
     const head = aimHead;
