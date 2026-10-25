@@ -17,7 +17,10 @@
         <div class="hitmark">X</div>
         <div class="dmgdir"><svg viewBox="-80 -190 160 45" width="160" height="45"><polygon points="-70,-150 0,-185 70,-150 0,-165" /></svg></div>
         <div class="ammo-hint"></div>
-        <div class="tl"><div class="wave"></div><div class="pu"></div></div>
+        <div class="markers"></div>
+        <div class="tl"><div class="wave"></div><div class="zcount"></div><div class="pu"></div></div>
+        <div class="putimers"></div>
+        <div class="revivein"><div class="rtext"></div><div class="ibar"><div class="fill"></div></div></div>
         <div class="bosses"></div>
         <div class="bl"><div class="team"></div><div class="perks"></div><div class="hp"><div class="hp-fill"></div><div class="hp-text"></div></div><div class="points">500</div><div class="popups"></div></div>
         <div class="br"><div class="weapon"></div><div class="ammo"></div><div class="nades"></div></div>
@@ -36,6 +39,10 @@
       this.interactL = q('.itext'); this.interactBar = q('.ibar'); this.interactFill = q('.ibar .fill');
       this.centerL = q(".centermsg"); this.downL = q('.down'); this.scorePanel = q('.scoreboard'); this.scoreTable = q('.scoreboard table');
       this.clickHint = q('.clickhint');
+      this.zcount = q('.zcount'); this.puTimers = q('.putimers'); this.markersEl = q('.markers');
+      this.reviveIn = q('.revivein'); this.reviveInText = q('.revivein .rtext'); this.reviveInFill = q('.revivein .fill');
+      this.puBoxes = {};
+      this.markerPool = [];
       this.pausePanel = null;
       this.overPanel = null;
       this.perkKey = '';
@@ -71,20 +78,23 @@
         this.waveL.classList.add('flash');
       }
       const pu = [];
-      if (w.doubleT > 0) pu.push(`DOUBLE POINTS ${Math.ceil(w.doubleT)}`);
-      if (w.instaT > 0) pu.push(`INSTA-KILL ${Math.ceil(w.instaT)}`);
       if (w.state === 'intermission' && w.wave > 0 && !w.gameOver) pu.push(`Next wave in ${Math.ceil(Math.max(w.stateT, 0))}`);
       this.set(this.puL, 'pu', pu.join('\n'));
 
       this.set(this.pointsL, 'pts', String(p.points));
+      this.updateCount();
+      this.updateTimers();
+      this.updateMarkers();
+      this.updateReviveIn();
       const a = p.active(), wd = DW.WEAPONS[a.id];
-      this.set(this.weaponL, 'wep', wd.name + (p.reloading ? '   [RELOADING]' : ''));
-      this.set(this.ammoL, 'ammo', `${a.mag} / ${a.reserve}`);
+      this.set(this.weaponL, 'wep', (a.pap ? '\u25C6 ' + wd.name + ' \u25C6  POONCHED' : wd.name) + (p.reloading ? '   [RELOADING]' : ''));
+      this.weaponL.style.color = a.pap ? 'rgb(90, 255, 170)' : '';
+      this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(wd.mag / 4) ? RED : BONE);
-      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades}    [G]`);
+      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades}    [G]      Wind: ${p.wind.mag}/${DW.WIND_CHARGES}    [3]`);
       const lowMag = a.mag <= Math.max(1, Math.floor(wd.mag / 4));
       let hint = '';
-      if (p.dead || p.reloading) hint = '';
+      if (p.dead || p.reloading || a.id === 'wind') hint = '';
       else if (a.mag === 0 && a.reserve === 0) hint = 'NO AMMO';
       else if (lowMag && a.reserve > 0) hint = 'RELOAD  [R]';
       else if (lowMag) hint = 'LOW AMMO';
@@ -137,7 +147,7 @@
       while (this.bossRows.length > bosses.length) this.bossRows.pop().row.remove();
       bosses.forEach((b, i) => {
         const r = this.bossRows[i];
-        const name = (b.ztype === 'brute' ? 'BRUTE' : 'ABOMINATION') + (b.hpFrac <= 0.5 ? '  -  ENRAGED' : '');
+        const name = (DW.BOSS_NAMES[b.ztype] || 'BOSS') + (b.hpFrac <= 0.5 ? '  -  ENRAGED' : '');
         if (r.name.textContent !== name) r.name.textContent = name;
         r.fill.style.width = (b.hpFrac * 100).toFixed(1) + '%';
         r.fill.classList.toggle('enraged', b.hpFrac <= 0.5);
@@ -148,6 +158,97 @@
       this.scorePanel.style.display = showScore ? '' : 'none';
       if (showScore) this.fillScoreboard(this.scoreTable);
       this.clickHint.style.display = !DW.Input.locked && !this.pausePanel && !w.gameOver && !DW.botActive ? 'block' : 'none';
+    }
+
+    // zombies left this round
+    updateCount() {
+      const w = this.world;
+      const rem = w.remaining(), tot = w.waveTotal;
+      const show = w.state === 'wave' && tot > 0 && !w.gameOver;
+      const txt = !show ? '' : rem === 1 ? 'LAST ZOMBIE' : `ZOMBIES  ${rem} / ${tot}`;
+      this.set(this.zcount, 'zc', txt);
+      this.zcount.classList.toggle('last', show && rem === 1);
+    }
+
+    // big power-up timers (bottom centre) that drain and flash when nearly out
+    updateTimers() {
+      const w = this.world;
+      const items = [
+        { key: 'insta', on: w.instaT > 0, t: w.instaT, label: 'INSTA-KILL', icon: '!', color: [0.9, 0.2, 0.2] },
+        { key: 'double', on: w.doubleT > 0, t: w.doubleT, label: 'DOUBLE POINTS', icon: 'x2', color: [1.0, 0.85, 0.2] },
+      ];
+      for (const it of items) {
+        let b = this.puBoxes[it.key];
+        if (it.on && !b) {
+          const el = UI.el('div', 'putimer');
+          el.innerHTML = `<div class="puicon">${it.icon}</div><div class="puinfo"><div class="pulabel">${it.label}</div><div class="putime"></div><div class="pubar"><div class="pufill"></div></div></div>`;
+          el.style.setProperty('--pc', UI.rgb(it.color));
+          this.puTimers.appendChild(el);
+          b = this.puBoxes[it.key] = { el, time: el.querySelector('.putime'), fill: el.querySelector('.pufill') };
+        }
+        if (!it.on && b) { b.el.remove(); delete this.puBoxes[it.key]; continue; }
+        if (!b) continue;
+        b.time.textContent = Math.ceil(it.t) + 's';
+        b.fill.style.width = (DW.clamp(it.t / 30, 0, 1) * 100).toFixed(1) + '%';
+        b.el.classList.toggle('ending', it.t < 5);
+      }
+    }
+
+    // screen markers: downed teammates (with revive state) and the last zombie, shown through walls
+    updateMarkers() {
+      const w = this.world, p = w.player, cam = p.camera;
+      const ui = document.getElementById('ui');
+      const W = parseFloat(ui.style.width) || 1600, H = parseFloat(ui.style.height) || 900;
+      const list = [];
+      for (const r of w.remotes.values()) {
+        if (!r.down || r.dead) continue;
+        const reviving = r.reviveAt !== undefined && w.elapsed - r.reviveAt < 0.4;
+        const sub = reviving ? `REVIVING ${Math.round((r.reviveP || 0) * 100)}%` : `${Math.max(0, Math.ceil(r.bleedT || 0))}s - hold E to revive`;
+        list.push({ x: r.posV.x, y: r.posV.y + 1.1, z: r.posV.z, icon: '+', text: `${r.name} DOWN`, sub, cls: reviving ? 'mk-revive' : 'mk-down' });
+      }
+      if (w.state === 'wave' && w.remaining() === 1 && w.zombies.size === 1) {
+        const z = w.zombies.values().next().value;
+        if (z && !z.dead) list.push({ x: z.pos.x, y: z.pos.y + 2.1 * z.s, z: z.pos.z, icon: '!', text: 'LAST ZOMBIE', sub: '', cls: 'mk-last' });
+      }
+      while (this.markerPool.length < list.length) {
+        const el = UI.el('div', 'marker');
+        el.innerHTML = '<div class="mk-icon"></div><div class="mk-text"></div><div class="mk-sub"></div><div class="mk-dist"></div>';
+        this.markersEl.appendChild(el);
+        this.markerPool.push({ el, icon: el.querySelector('.mk-icon'), text: el.querySelector('.mk-text'), sub: el.querySelector('.mk-sub'), dist: el.querySelector('.mk-dist') });
+      }
+      const v = new THREE.Vector3();
+      this.markerPool.forEach((m, i) => {
+        const it = list[i];
+        if (!it) { m.el.style.display = 'none'; return; }
+        m.el.style.display = '';
+        m.el.className = 'marker ' + it.cls;
+        v.set(it.x, it.y, it.z).project(cam);
+        let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+        const behind = v.z > 1;
+        if (behind) { x = W - x; y = H - 60; }
+        const edge = behind || x < 40 || x > W - 40 || y < 70 || y > H - 40;
+        x = DW.clamp(x, 40, W - 40);
+        y = DW.clamp(y, 70, H - 40);
+        m.el.style.left = x.toFixed(0) + 'px';
+        m.el.style.top = y.toFixed(0) + 'px';
+        m.el.classList.toggle('edge', edge);
+        if (m.icon.textContent !== it.icon) m.icon.textContent = it.icon;
+        if (m.text.textContent !== it.text) m.text.textContent = it.text;
+        if (m.sub.textContent !== it.sub) m.sub.textContent = it.sub;
+        const d = Math.round(Math.hypot(it.x - p.pos.x, it.z - p.pos.z)) + 'm';
+        if (m.dist.textContent !== d) m.dist.textContent = d;
+      });
+    }
+
+    // someone is holding E on us
+    updateReviveIn() {
+      const w = this.world, ri = w.reviveIn;
+      const on = w.player.downed && ri && w.elapsed - ri.t < 0.4;
+      this.reviveIn.style.display = on ? 'block' : 'none';
+      if (on) {
+        this.set(this.reviveInText, 'ri', `${DW.Net.persona(ri.by)} is reviving you`);
+        this.reviveInFill.style.width = (DW.clamp(ri.p, 0, 1) * 100).toFixed(1) + '%';
+      }
     }
 
     fillScoreboard(table) {

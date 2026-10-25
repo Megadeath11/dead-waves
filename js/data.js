@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.2.1';
+DW.VERSION = '2.3';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -40,8 +40,18 @@ DW.WEAPONS = {
     color: [0.3, 0.3, 0.33], len: 1.1, snd: 'shot_light', splash: 0, kick: 0.5, pierce: 1 },
 };
 
+// equipment on key 3: its own slot, not a box or wall gun
+DW.WEAPONS.wind = { name: 'Wind Charge', dmg: 0, rpm: 130, auto: false, mag: 3, reserve: 0, reload: 0, ads: 0.5, pellets: 0, range: 0, cost: 0, head: 1,
+  color: [0.75, 0.92, 1.0], len: 0.4, snd: 'wind', splash: 0, kick: 2.5, pierce: 0 };
+DW.WIND_CHARGES = 3;
+DW.WIND_RECHARGE = 3.0; // seconds per charge
+
 DW.BOX_POOL = ['lmg', 'deagle', 'sniper', 'plasma', 'minigun', 'ak', 'mp5', 'shotgun', 'm14'];
 DW.BOX_COST = 1950;
+DW.PAP_COST = 20000;      // Pack-a-Poonch: gem finish + 4x damage
+DW.PAP_DAMAGE = 4;
+DW.GRENADE_COST = 150;    // per grenade at the grenade wall-buy
+DW.MAX_GRENADES = 10;
 DW.BOX_UNLOCK_WAVE = 5; // the box stays shut until this wave, so you work through the wall guns first
 // box odds (relative): wall guns common, the big guns rare
 DW.BOX_WEIGHT = { m14: 6, shotgun: 6, mp5: 6, ak: 5, deagle: 4, lmg: 3, sniper: 2, plasma: 1.5, minigun: 1 };
@@ -53,7 +63,9 @@ DW.PERKS = {
   wind: { name: 'Second Wind', cost: 1500, color: [0.2, 0.55, 1.0], desc: 'Solo: self-revive once. Co-op: revive twice as fast' },
 };
 DW.PERK_ORDER = ['iron', 'fast', 'tap', 'wind'];
-DW.ZTYPES = ['walker', 'runner', 'brute', 'spitter'];
+DW.ZTYPES = ['walker', 'runner', 'brute', 'spitter', 'goonlord'];
+DW.GOON_WAVE = 20;   // the Goon Lord rises on this wave, then every 10 waves
+DW.BOSS_NAMES = { brute: 'BRUTE', spitter: 'ABOMINATION', goonlord: 'GOON LORD - THE WENDYGOON' };
 
 // ---------------------------------------------------------------- small helpers
 

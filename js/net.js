@@ -28,9 +28,9 @@
   function encode(type, data) {
     if (type === 'zs') {
       const a = data.a;
-      const f = new Float32Array(3 + a.length);
-      f[0] = data.w; f[1] = Math.max(0, ST_CODES.indexOf(data.st)); f[2] = data.t;
-      f.set(a, 3);
+      const f = new Float32Array(5 + a.length);
+      f[0] = data.w; f[1] = Math.max(0, ST_CODES.indexOf(data.st)); f[2] = data.t; f[3] = data.rem || 0; f[4] = data.tot || 0;
+      f.set(a, 5);
       const out = new Uint8Array(4 + f.byteLength);
       out[0] = 1;
       out.set(new Uint8Array(f.buffer), 4);
@@ -46,7 +46,7 @@
     if (bytes[0] === 1) {
       const copy = bytes.slice(4);
       const f = new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength >> 2);
-      return ['zs', { w: f[0], st: ST_CODES[f[1] | 0] || 'wave', t: f[2], a: f.subarray(3) }];
+      return ['zs', { w: f[0], st: ST_CODES[f[1] | 0] || 'wave', t: f[2], rem: f[3], tot: f[4], a: f.subarray(5) }];
     }
     try {
       const m = JSON.parse(utf8d.decode(bytes.subarray(1)));

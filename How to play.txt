@@ -12,7 +12,7 @@ or click "Join co-op game" and paste the code.
 Controls
   WASD move, Shift sprint, Ctrl/C crouch, Space jump
   Left mouse fire, Right mouse aim (no spread: shots go exactly where the dot is)
-  R reload, 1/2/Q/mouse wheel switch gun, V knife, G grenade
+  R reload, 1/2/Q/mouse wheel switch gun, 3 wind charge, V knife, G grenade
   E buy / open doors / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
 
 If Windows SmartScreen says "Windows protected your PC", click "More info"

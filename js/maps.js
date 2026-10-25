@@ -4,6 +4,7 @@
 //   D  door (opens the highest zone next to it)
 //   W  wall-buy weapon on a wall      M  mystery box
 //   K  perk machine    S  zombie spawn    P  player spawn
+//   U  Pack-a-Poonch desk          G  grenade wall-buy (on a wall)
 // Edit the rows or add a new entry to MAPS to make your own map.
 'use strict';
 (function () {
@@ -37,9 +38,9 @@
         '#1111111#.....PP.....#2222222#',
         '#11C1111#..C......C..#22222C2#',
         '#1111111W............W2222222#',
-        '#1111111#...##..##...#2222222#',
+        '#1111111#...G#..##...#2222222#',
         '#1111111#............#22K2222#',
-        '#1111111#............#2222222#',
+        '#1111111#............#22222U2#',
         '#1111111#..........K.#2222222#',
         '#S11111S#S....S.....S#S22222S#',
         '##############################',
@@ -64,7 +65,7 @@
         '#11##11##11#2222222222222#',
         '#1111111111W2222222222222#',
         '#S111111111#2222222222222#',
-        '####DD##W###2222222222222#',
+        '##G#DD##W###2222222222222#',
         '#..........#2222222222222#',
         '#..C....C..#22##22222##22#',
         '#..........W2222222222222#',
@@ -72,7 +73,7 @@
         '#...PP..M..D2222222222222#',
         '#..........D2222222222222#',
         '#..C....C..#22##22222##22#',
-        '#....K.....#2222222222222#',
+        '#....K.....#2222222222U22#',
         '#S........S#S22222S22222S#',
         '##########################',
       ],
@@ -97,10 +98,10 @@
         '#....................#333333333#',
         '#....C....PP....C....D333333333#',
         '#........MPP.........D333333333#',
-        '#..................K.#333333333#',
+        '#..................K.#3333333U3#',
         '#..X....X....X....X..W333C33333#',
         '#S..................S#333333333#',
-        '######W##DDDD##W######333333333#',
+        '##G###W##DDDD##W######333333333#',
         '#22222222222222222222#333333333#',
         '#2222X222222222X22222#333333333#',
         '#222222222K2222222222#33C333C33#',
@@ -141,7 +142,7 @@
     const rows = def.rows, h = rows.length, w = rows[0].length;
     const origin = [-w * CELL * 0.5, 0, -h * CELL * 0.5];
     const phys = new DW.Phys(origin[0], origin[2], -origin[0], -origin[2]);
-    const info = { spawns: [], player_spawns: [], wallbuys: [], doors: [], boxes: [], perks: [], lamps: [], def, phys, origin, size: [w * CELL, h * CELL] };
+    const info = { spawns: [], player_spawns: [], wallbuys: [], doors: [], boxes: [], perks: [], paps: [], grenadeBuys: [], lamps: [], def, phys, origin, size: [w * CELL, h * CELL] };
     const grid = rows.map(row => row.split(''));
     const cellPos = (c, r) => [origin[0] + (c + 0.5) * CELL, 0, origin[2] + (r + 0.5) * CELL];
     const neighborZone = (c, r) => {
@@ -168,9 +169,9 @@
       let c = 0;
       while (c < w) {
         const ch = grid[r][c];
-        if (ch === '#' || ch === 'W') {
+        if (ch === '#' || ch === 'W' || ch === 'G') {
           const start = c;
-          while (c < w && (grid[r][c] === '#' || grid[r][c] === 'W')) c++;
+          while (c < w && '#WG'.includes(grid[r][c])) c++;
           const len = c - start;
           const p = cellPos(start, r);
           p[0] += (len - 1) * CELL * 0.5;
@@ -220,6 +221,12 @@
         case 'D':
           if (!visited.has(c + ',' + r)) buildDoor(scene, phys, grid, c, r, w, h, origin, visited, info);
           break;
+        case 'U':
+          buildPap(stat, phys, p, info, faceYaw(grid, c, r, w, h));
+          break;
+        case 'G':
+          buildGrenadeBuy(stat, grid, c, r, w, h, p, info);
+          break;
       }
       const z = Maps.zoneOf(ch);
       if (z >= 0 && rng.randf() < 0.1) M.clutter(stat, [p[0] + rng.range(-0.4, 0.4), 0, p[2] + rng.range(-0.4, 0.4)], rng);
@@ -267,6 +274,47 @@
     const lx = p[0] - Math.sin(yaw) * 0.8, lz = p[2] - Math.cos(yaw) * 0.8;
     info.lamps.push({ pos: [lx, 2.4, lz], color: pd.color, energy: 1.6, range: 4.5, fixed: true });
     info.perks.push({ pos: p, perk });
+  }
+
+  function buildPap(stat, phys, p, info, yaw) {
+    const root = M.node(stat, p, yaw);
+    M.papDesk(root);
+    const sw = Math.abs(Math.sin(yaw)) > 0.5;
+    phys.addBox([p[0], 0.7, p[2]], sw ? [0.9, 1.4, 1.75] : [1.75, 1.4, 0.9], 'pap');
+    M.label(root, [0, 2.0, 0], `PACK-A-POONCH  ${DW.PAP_COST}`, 38, [0.4, 1.0, 0.7]);
+    info.paps.push({ pos: p });
+    info.lamps.push({ pos: [p[0] - Math.sin(yaw) * 0.9, 1.9, p[2] - Math.cos(yaw) * 0.9], color: [0.3, 1.0, 0.6], energy: 2.0, range: 5, fixed: true });
+  }
+
+  // Grenade wall-buy: a chalk board on the wall face that looks into the nearest zone.
+  function buildGrenadeBuy(stat, grid, c, r, w, h, p, info) {
+    const { n, zone } = wallFace(grid, c, r, w, h);
+    const face = [p[0] + n[0] * (CELL * 0.5 + 0.02), 0, p[2] + n[2] * (CELL * 0.5 + 0.02)];
+    const root = M.node(stat, [face[0], 1.5, face[2]], Math.atan2(-n[0], -n[2]));
+    M.box(root, [0, 0, 0], [1.2, 0.85, 0.03], M.mat([0.12, 0.13, 0.12]));
+    for (const e of [[0, 0.4, -0.02], [0, -0.4, -0.02]]) M.box(root, e, [1.1, 0.02, 0.01], M.mat([0.9, 0.88, 0.8], 0.3, 0, 1, true));
+    for (const x of [-0.3, 0, 0.3]) {
+      const g = M.grenadeChalk();
+      g.position.set(x, -0.05, -0.03);
+      g.scale.set(1, 1, 0.15);
+      root.add(g);
+    }
+    M.label(root, [0, 0.62, -0.05], `GRENADES  ${DW.GRENADE_COST} each`, 34, [1.0, 0.95, 0.8]);
+    info.grenadeBuys.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], zone });
+  }
+
+  // direction a wall cell faces: toward the lowest-numbered open zone next to it
+  function wallFace(grid, c, r, w, h) {
+    let bestDir = [0, 0], bestZone = 99;
+    for (const d of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const cc = c + d[0], rr = r + d[1];
+      if (rr >= 0 && rr < h && cc >= 0 && cc < w) {
+        let z = Maps.zoneOf(grid[rr][cc]);
+        if (z < 0 && 'SPMKU'.includes(grid[rr][cc])) z = 0;
+        if (z >= 0 && z < bestZone) { bestZone = z; bestDir = d; }
+      }
+    }
+    return { n: [bestDir[0], 0, bestDir[1]], zone: bestZone };
   }
 
   function buildWallbuy(stat, grid, c, r, w, h, p, wep, info) {

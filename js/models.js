@@ -448,6 +448,45 @@
     return r;
   };
 
+  // The Goon Lord, the Wendygoon: a gaunt, pale, antlered thing with a skull face and long claws.
+  M.wendygoon = (parent, rng) => {
+    const r = M.humanoid(parent, { build: 'lean', skin: [0.72, 0.7, 0.64], shirt: [0.16, 0.13, 0.11], pants: [0.12, 0.1, 0.09],
+      shoe: [0.08, 0.07, 0.06], eye: [0.75, 1.0, 1.0], sleeves: false, hand: [0.2, 0.18, 0.16] });
+    const bone = M.mat([0.86, 0.82, 0.7]);
+    const fur = M.mat([0.14, 0.11, 0.09], 0, 0, 1);
+    const dark = M.mat([0.05, 0.04, 0.04]);
+    const spine = r.spine, head = r.head;
+    // ribcage on a sunken chest
+    for (let k = 0; k < 5; k++) M.box(spine, [0, 0.2 + k * 0.065, -0.12], [0.3 - k * 0.02, 0.022, 0.03], bone);
+    M.box(spine, [0, 0.33, -0.1], [0.03, 0.3, 0.03], bone);
+    // shaggy fur mantle on the shoulders and back
+    M.box(spine, [0, 0.55, 0.04], [0.56, 0.12, 0.3], fur);
+    for (let k = 0; k < 6; k++) M.box(spine, [rng.range(-0.25, 0.25), rng.range(0.3, 0.55), 0.13], [0.1, rng.range(0.2, 0.35), 0.06], fur, [rng.range(-0.3, 0.3), 0, rng.range(-0.3, 0.3)]);
+    // skull face
+    M.box(head, [0, 0.14, -0.02], [0.27, 0.3, 0.27], bone);
+    M.box(head, [0, 0.0, -0.08], [0.2, 0.08, 0.17], bone);
+    for (const x of [-0.065, 0.065]) M.box(head, [x, 0.17, -0.155], [0.08, 0.07, 0.02], dark);
+    M.box(head, [0, 0.09, -0.155], [0.04, 0.05, 0.02], dark);
+    const eye = M.mat([0.75, 1.0, 1.0], 8.0);
+    for (const x of [-0.065, 0.065]) M.box(head, [x, 0.17, -0.168], [0.035, 0.03, 0.01], eye);
+    for (let k = 0; k < 5; k++) M.box(r.jaw, [-0.08 + k * 0.04, -0.06, -0.13], [0.022, 0.05, 0.015], bone);
+    // antlers
+    for (const side of [-1, 1]) {
+      const a = M.joint(head, [0.1 * side, 0.27, 0.0]);
+      a.rotation.set(-0.2, 0, -0.5 * side);
+      M.cyl(a, [0, 0.22, 0], 0.018, 0.03, 0.45, bone, 5);
+      for (const [y, ang, len] of [[0.14, 0.9, 0.2], [0.28, -0.8, 0.18], [0.38, 0.7, 0.16]]) {
+        const tine = M.joint(a, [0, y, 0]);
+        tine.rotation.set(ang * 0.6, 0, ang * side);
+        M.cyl(tine, [0, len / 2, 0], 0.008, 0.018, len, bone, 4);
+      }
+    }
+    // long claws
+    for (const el of [r.elbow_l, r.elbow_r])
+      for (const x of [-0.035, 0, 0.035]) M.box(el, [x, -0.45, -0.02], [0.015, 0.18, 0.02], dark, [0.25, 0, 0]);
+    return r;
+  };
+
   // Player soldier for remote teammates. Returns the rig plus a gun_mount node.
   M.soldier = (parent, color) => {
     const opt = { skin: [0.62, 0.47, 0.36], shirt: color, pants: M.darkened(color, 0.3), shoe: [0.08, 0.07, 0.06], hand: [0.08, 0.08, 0.08], eye: null, long_sleeves: true };
@@ -463,11 +502,12 @@
     M.box(head, [0, 0.27, 0.01], [0.31, 0.1, 0.31], helmet);
     M.box(head, [0, 0.22, 0.01], [0.34, 0.04, 0.34], helmet);
     M.box(head, [0, 0.2, -0.15], [0.2, 0.04, 0.03], M.mat([0.05, 0.05, 0.06], 0, 0.6, 0.2));
-    r.arm_r.rotation.set(-1.2, 0, 0);
-    r.elbow_r.rotation.set(-0.35, 0, 0);
-    r.arm_l.rotation.set(-1.25, 0.55, 0);
-    r.elbow_l.rotation.set(-0.2, 0, 0);
-    r.gun_mount = M.joint(spine, [0.13, 0.42, -0.36]);
+    // hold-the-gun pose (fitted so the right hand sits on the grip, the left on the front of the gun)
+    r.arm_r.rotation.set(0.25, 0.5, 0);
+    r.elbow_r.rotation.set(1.8, 0, 0);
+    r.arm_l.rotation.set(1.4, -0.65, 0);
+    r.elbow_l.rotation.set(0, 0, 0);
+    r.gun_mount = M.joint(spine, [0.13, 0.36, -0.30]);
     return r;
   };
 
@@ -475,7 +515,7 @@
 
   // Gun model for weapon id, pointing -Z, origin at the grip. userData.muzzle = [x,y,z].
   // chalk builds a flat outline for wall-buys.
-  M.gun = (id, chalk = false) => {
+  M.gun = (id, chalk = false, pap = false) => {
     const g = new T.Group();
     const accent = DW.WEAPONS[id].color;
     let metal = M.mat(METAL, 0, 0.7, 0.4);
@@ -590,6 +630,17 @@
         muzzle = [0, 0.04, -0.4];
         break;
       }
+      case 'wind': {
+        const pale = chalk ? metal : M.mat([0.82, 0.9, 0.95], 0, 0.2, 0.4);
+        const core = chalk ? metal : M.mat([0.55, 0.9, 1.0], 3.0);
+        box([0, 0.03, -0.06], [0.07, 0.08, 0.22], pale);
+        box([0, -0.05, 0.02], [0.04, 0.1, 0.05], poly, [0.25, 0, 0]);
+        for (let k = 0; k < 3; k++) cyl([0, 0.04, -0.2 - k * 0.07], 0.055 - k * 0.008, 0.055 - k * 0.008, 0.015, core, 10, x90);
+        cyl([0, 0.04, -0.2], 0.025, 0.035, 0.24, pale, 8, x90);
+        box([0, 0.09, -0.05], [0.02, 0.03, 0.12], core);
+        muzzle = [0, 0.04, -0.4];
+        break;
+      }
       case 'minigun':
         for (let k = 0; k < 6; k++) {
           const a = k * Math.PI * 2 / 6;
@@ -604,6 +655,92 @@
         break;
     }
     g.userData.muzzle = muzzle;
+    if (pap) M.papify(g);
+    return g;
+  };
+
+  // ---------------------------------------------------------------- Pack-a-Poonch finish
+  // A tiny bright cube map so the gem materials have something to reflect (the rest of the game has none).
+  let _papEnv = null;
+  function papEnv() {
+    if (_papEnv) return _papEnv;
+    const faces = [];
+    for (let f = 0; f < 6; f++) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 64, 64);
+      g.addColorStop(0, f === 2 ? '#ffffff' : '#9fffe0');
+      g.addColorStop(0.5, '#0b3a2a');
+      g.addColorStop(1, f % 2 ? '#e8ffff' : '#40c890');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      for (let k = 0; k < 5; k++) ctx.fillRect((k * 23 + f * 11) % 64, 0, 3, 64); // light streaks
+      faces.push(c);
+    }
+    _papEnv = new T.CubeTexture(faces);
+    _papEnv.encoding = T.sRGBEncoding;
+    _papEnv.needsUpdate = true;
+    return _papEnv;
+  }
+  let _papMats = null;
+  M.papMats = () => {
+    if (_papMats) return _papMats;
+    const env = papEnv();
+    _papMats = [
+      new T.MeshStandardMaterial({ color: M.color([0.05, 0.85, 0.45]), emissive: M.color([0.0, 0.55, 0.3]), emissiveIntensity: 0.6, metalness: 0.9, roughness: 0.12, envMap: env, envMapIntensity: 1.6 }), // emerald
+      new T.MeshStandardMaterial({ color: M.color([0.85, 1.0, 1.0]), emissive: M.color([0.4, 0.8, 0.85]), emissiveIntensity: 0.4, metalness: 0.95, roughness: 0.05, envMap: env, envMapIntensity: 2.0 }), // diamond
+      new T.MeshStandardMaterial({ color: M.color([0.1, 0.6, 0.35]), emissive: M.color([0.05, 0.4, 0.25]), emissiveIntensity: 0.5, metalness: 0.9, roughness: 0.2, envMap: env, envMapIntensity: 1.3 }), // dark emerald
+    ];
+    return _papMats;
+  };
+  // Swap every part of a gun to the gem finish (alternating emerald / diamond).
+  M.papify = g => {
+    const mats = M.papMats();
+    let i = 0;
+    g.traverse(o => { if (o.isMesh) { o.material = mats[i % mats.length]; o.userData.noBake = true; i++; } });
+  };
+  // shimmer: called every frame by the world
+  M.tickPap = t => {
+    if (!_papMats) return;
+    _papMats[0].emissiveIntensity = 0.45 + 0.35 * Math.sin(t * 3.1);
+    _papMats[1].emissiveIntensity = 0.3 + 0.35 * Math.sin(t * 4.3 + 1.7);
+    _papMats[2].emissiveIntensity = 0.35 + 0.3 * Math.sin(t * 2.4 + 3.1);
+  };
+
+  // The Pack-a-Poonch: an old desk with a humming gem machine on top. Faces -Z.
+  M.papDesk = parent => {
+    const root = M.joint(parent, [0, 0, 0]);
+    const wood = M.mat([0.36, 0.22, 0.12]);
+    const dark = M.mat([0.2, 0.12, 0.07]);
+    const metal = M.mat([0.3, 0.32, 0.34], 0, 0.7, 0.4);
+    M.box(root, [0, 0.78, 0], [1.7, 0.08, 0.85], wood);
+    for (const x of [-0.78, 0.78]) for (const z of [-0.36, 0.36]) M.box(root, [x, 0.38, z], [0.08, 0.76, 0.08], dark);
+    M.box(root, [0.52, 0.5, 0], [0.55, 0.5, 0.75], wood);                     // drawers
+    for (const y of [0.38, 0.62]) M.box(root, [0.52, y, -0.38], [0.12, 0.03, 0.02], metal);
+    M.box(root, [0, 1.02, 0.05], [0.9, 0.4, 0.55], metal);                     // machine
+    M.box(root, [0, 1.25, 0.05], [0.95, 0.06, 0.6], M.mat([0.12, 0.12, 0.13], 0, 0.6, 0.3));
+    const glow = M.mat([0.2, 1.0, 0.6], 3.0);
+    M.box(root, [0, 1.02, -0.231], [0.7, 0.18, 0.02], glow);                   // slot
+    for (const x of [-0.3, 0.3]) M.cyl(root, [x, 1.38, 0.05], 0.05, 0.05, 0.22, metal, 6);
+    // gem crystals on top
+    const gems = M.papMats();
+    [[-0.18, 1.42, 0.1, 0.22], [0.05, 1.47, -0.02, 0.3], [0.22, 1.4, 0.14, 0.18]].forEach(([x, y, z, h], i) => {
+      const c = M.cyl(root, [x, y, z], 0.0, 0.07, h, gems[i % 3], 5);
+      c.userData.noBake = true;
+    });
+    return root;
+  };
+
+  // Chalk drawing of a grenade for the grenade wall-buy.
+  M.grenadeChalk = () => {
+    const g = new T.Group();
+    const c = M.mat([0.92, 0.9, 0.82], 0.4, 0, 1, true);
+    M.ball(g, [0, 0, 0], 0.11, c, 8);
+    M.box(g, [0, 0.13, 0], [0.06, 0.06, 0.06], c);
+    M.box(g, [0.06, 0.15, 0], [0.12, 0.02, 0.03], c, [0, 0, -0.5]);
+    M.cyl(g, [-0.07, 0.18, 0], 0.03, 0.03, 0.01, c, 8, [Math.PI / 2, 0, 0]);
     return g;
   };
 

@@ -7,7 +7,7 @@
     move_left: ['KeyA', 'ArrowLeft'], move_right: ['KeyD', 'ArrowRight'],
     jump: ['Space'], sprint: ['ShiftLeft', 'ShiftRight'], crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
     reload: ['KeyR'], interact: ['KeyE', 'KeyF'], melee: ['KeyV', 'Mouse1'],
-    grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], swap: ['KeyQ'],
+    grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], weapon_3: ['Digit3', 'Mouse3', 'Mouse4'], swap: ['KeyQ'],
     scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'],
   };
   const down = new Set();

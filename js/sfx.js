@@ -95,6 +95,10 @@
       return (Math.sin(TAU * fq * t) + Math.sin(TAU * fq * 2 * t) * 0.3) * Math.exp(-lt * 9) * 0.3;
     });
     sounds.throw = wav(0.2, t => (Math.random() * 2 - 1) * Math.sin(Math.PI * t / 0.2) * 0.25);
+    const wd2 = [0];
+    sounds.wind = wav(0.45, t => lp(wd2, 0.35) * Math.sin(Math.PI * t / 0.45) * 0.7 + Math.sin(TAU * (700 - 900 * t) * t) * Math.exp(-t * 8) * 0.15);
+    const wb = [0];
+    sounds.wind_blast = wav(0.9, t => lp(wb, 0.12 + 0.3 * Math.exp(-t * 6)) * Math.exp(-t * 4) * 1.4 + Math.sin(TAU * 55 * t) * Math.exp(-t * 7) * 0.5);
     sounds.melee_hit = wav(0.15, t => Math.sin(TAU * 90 * t) * Math.exp(-t * 25) * 0.8 + (Math.random() * 2 - 1) * Math.exp(-t * 40) * 0.4);
   }
 

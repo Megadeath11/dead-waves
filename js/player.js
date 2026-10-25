@@ -30,6 +30,10 @@
       this.triggerHeld = false; this.interactHold = 0; this.inputEnabled = true;
       this.camHeight = 1.65; this.pivotY = 1.65; this.aimOnZombie = false;
       this.flashEnergy = 0;
+      this.wind = { id: 'wind', mag: DW.WIND_CHARGES, reserve: 0 };
+      this.windOut = false;
+      this.windRegen = 0;
+      this.airBoost = 0;
 
       this.camera = new THREE.PerspectiveCamera(DW.settings.fov, 16 / 9, 0.03, 300);
       this.camera.rotation.order = 'YXZ';
@@ -41,7 +45,9 @@
       this.gunRoot.position.set(0.2, -0.19, -0.42);
       this.vmScene.add(this.gunRoot);
       const def = world.mapDef;
-      this.vmScene.add(new THREE.AmbientLight(M.color(def.ambient), def.ambient_energy * 1.6 + 0.35));
+      this.vmAmbientBase = def.ambient_energy * 1.6 + 0.35;
+      this.vmAmbient = new THREE.AmbientLight(M.color(def.ambient), this.vmAmbientBase);
+      this.vmScene.add(this.vmAmbient);
       const key = new THREE.DirectionalLight(M.color([1, 0.92, 0.82]), 0.7);
       key.position.set(0.5, 1, 0.6);
       this.vmScene.add(key);
@@ -51,7 +57,7 @@
       this.buildGun();
     }
 
-    active() { return this.downed ? this.downedWeapon : this.weapons[this.cur]; }
+    active() { return this.downed ? this.downedWeapon : this.windOut ? this.wind : this.weapons[this.cur]; }
     wdata() { return DW.WEAPONS[this.active().id]; }
     alive() { return !this.downed && !this.dead; }
     eye(out = new THREE.Vector3()) { return out.set(this.pos.x, this.pos.y + this.pivotY, this.pos.z); }
@@ -60,10 +66,21 @@
       return out.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
     }
 
-    cycleWeapon() { if (this.weapons.length > 1) this.switchTo((this.cur + 1) % this.weapons.length); }
+    cycleWeapon() {
+      if (this.windOut) this.switchTo(this.cur, true);
+      else if (this.weapons.length > 1) this.switchTo((this.cur + 1) % this.weapons.length);
+    }
+    toggleWind() {
+      if (this.windOut) { this.switchTo(this.cur, true); return; }
+      this.windOut = true;
+      this.reloading = false;
+      this.switchT = 0.3;
+      this.buildGun();
+    }
     switchTo(i, force = false) {
       if (i < 0 || i >= this.weapons.length || (i === this.cur && !force)) return;
       this.cur = i;
+      this.windOut = false;
       this.reloading = false;
       this.switchT = 0.45;
       this.buildGun();
@@ -113,7 +130,8 @@
       if (this.crouching) spd = CROUCH;
       spd *= DW.lerp(1, 0.6, this.adsAmt);
       if (this.downed) spd = 1.1;
-      const accel = this.onFloor ? 12 : 3;
+      this.airBoost = Math.max(this.airBoost - dt, 0);
+      const accel = this.onFloor ? 12 : this.airBoost > 0 ? 0.6 : 3;
       const k = Math.min(1, dt * accel);
       this.vel.x = DW.lerp(this.vel.x, dx * spd, k);
       this.vel.z = DW.lerp(this.vel.z, dz * spd, k);
@@ -163,6 +181,11 @@
       this.meleeAnim = Math.max(this.meleeAnim - dt * 4, 0);
       this.firedFlag = Math.max(this.firedFlag - dt, 0);
       this.recoil = DW.moveToward(this.recoil, 0, dt * 14);
+      // wind charges refill one at a time
+      if (this.wind.mag < DW.WIND_CHARGES) {
+        this.windRegen += dt;
+        if (this.windRegen >= DW.WIND_RECHARGE) { this.windRegen = 0; this.wind.mag++; }
+      } else this.windRegen = 0;
       this.flashEnergy = DW.moveToward(this.flashEnergy, 0, dt * 60);
       this.vmFlash.intensity = this.flashEnergy * 0.6;
       if (this.flashMesh) this.flashMesh.visible = this.firedFlag > 0.1;
@@ -193,6 +216,7 @@
       if (this.downed) { hud.setInteract('', 0); return; }
       if (I.justPressed('weapon_1')) this.switchTo(0);
       if (I.justPressed('weapon_2')) this.switchTo(1);
+      if (I.justPressed('weapon_3')) this.toggleWind();
       if (I.justPressed('swap')) this.cycleWeapon();
       if (I.justPressed('melee')) this.melee();
       if (I.justPressed('grenade')) this.throwGrenade();
@@ -202,6 +226,7 @@
       if (hold > 0) {
         if (I.action('interact')) {
           this.interactHold += dt;
+          if (it.revive) w.sendReviving(it.revive, Math.min(this.interactHold / hold, 1));
           if (this.interactHold >= hold) { this.interactHold = 0; it.action(); }
         } else this.interactHold = 0;
         hud.setInteract(it.text, this.interactHold / hold);
@@ -256,6 +281,7 @@
         return;
       }
       w.mag -= 1;
+      if (w.id === 'wind') { this.fireWind(wd); return; }
       const rpm = wd.rpm * (this.perks.includes('tap') ? 1.33 : 1);
       this.fireCd = 60 / rpm;
       this.firedFlag = 0.15;
@@ -267,8 +293,9 @@
       this.flashEnergy = 3;
       const plasma = w.id === 'plasma';
       this.vmFlash.color.set(plasma ? 0x4dff80 : 0xffcc73);
-      for (let i = 0; i < wd.pellets; i++) this.shootRay(wd, plasma);
-      this.world.onLocalFire(w.id);
+      const ends = [];
+      for (let i = 0; i < wd.pellets; i++) ends.push(this.shootRay(wd, plasma));
+      this.world.onLocalFire(w.id, ends, plasma);
     }
 
     // No spread: every shot travels exactly along the centre of the screen.
@@ -277,7 +304,8 @@
       const dir = this.forward(new THREE.Vector3());
       const w = this.world;
       const excl = new Set();
-      let dmg = wd.dmg;
+      const mult = this.active().pap ? DW.PAP_DAMAGE : 1;
+      let dmg = wd.dmg * mult;
       let endT = 300;
       for (let k = 0; k < wd.pierce; k++) {
         const hit = w.raycast(from, dir, 300, excl);
@@ -290,14 +318,16 @@
           w.localHit(z, d, hit.head, false, at);
           excl.add(z);
           dmg *= 0.75;
-          if (wd.splash > 0) { w.localSplash(at, wd.splash, wd.dmg, z); break; }
+          if (wd.splash > 0) { w.localSplash(at, wd.splash, wd.dmg * mult, z); break; }
         } else {
           w.impactFx(at, hit.normal, plasma);
-          if (wd.splash > 0) w.localSplash(at, wd.splash, wd.dmg, null);
+          if (wd.splash > 0) w.localSplash(at, wd.splash, wd.dmg * mult, null);
           break;
         }
       }
-      w.tracer(this.muzzleWorld(), from.clone().addScaledVector(dir, endT), plasma);
+      const end = from.clone().addScaledVector(dir, endT);
+      w.tracer(this.muzzleWorld(), end, plasma);
+      return end;
     }
 
     muzzleWorld() {
@@ -307,6 +337,32 @@
       this.muzzle.getWorldPosition(p);
       // vm space is camera space; scale depth a little because the vm camera fov differs
       return p.applyMatrix4(this.camera.matrixWorld);
+    }
+
+    fireWind(wd) {
+      this.fireCd = 60 / wd.rpm;
+      this.firedFlag = 0.15;
+      DW.Sfx.play('wind', -2);
+      this.recoil += wd.kick;
+      const f = this.forward(new THREE.Vector3());
+      this.world.launchWind(this.muzzleWorld(), f, true);
+    }
+
+    // a wind blast went off at pos: get flung away from it (aim at your feet to boost)
+    windKnock(pos) {
+      if (!this.alive()) return;
+      const dx = this.pos.x - pos.x, dy = this.pos.y + 0.9 - pos.y, dz = this.pos.z - pos.z;
+      const d = Math.hypot(dx, dy, dz);
+      const R = 3.6;
+      if (d > R) return;
+      const k = 1 - d / R;
+      const h = Math.hypot(dx, dz) || 1;
+      const push = 10 * k + 4;
+      this.vel.x += dx / h * push * Math.min(1, h / Math.max(d, 0.01) + 0.3);
+      this.vel.z += dz / h * push * Math.min(1, h / Math.max(d, 0.01) + 0.3);
+      this.vel.y = Math.max(this.vel.y, 5 + 7 * k * (dy > -0.2 ? 1 : 0.4));
+      this.onFloor = false;
+      this.airBoost = 1.2; // keep air control while flying
     }
 
     startReload() {
@@ -343,6 +399,18 @@
         this.switchTo(this.cur, true);
       }
     }
+    // Pack-a-Poonch the gun in hand: gem finish, more damage, full ammo
+    packAPunch() {
+      const w = this.active(), wd = DW.WEAPONS[w.id];
+      w.pap = true;
+      w.mag = wd.mag;
+      w.reserve = wd.reserve;
+      this.reloading = false;
+      this.switchT = 0.6;
+      this.buildGun();
+      this.world.sendPstate(true);
+    }
+
     hasWeapon(id) { return this.weapons.some(w => w.id === id); }
     refillAmmo() {
       for (const w of this.weapons) w.reserve = DW.WEAPONS[w.id].reserve;
@@ -404,7 +472,7 @@
       const gm = this.gunModel = new THREE.Group();
       gm.scale.setScalar(0.9);
       this.gunRoot.add(gm);
-      const g = M.gun(id);
+      const g = M.gun(id, false, !!this.active().pap);
       // aim-down-sights height: the top of the gun sits just under the centre dot
       const bb = new THREE.Box3().setFromObject(g);
       this.adsY = -bb.max.y * 0.9 - 0.012;
@@ -511,6 +579,8 @@
       const pd = DW.WEAPONS.pistol;
       this.weapons = [{ id: 'pistol', mag: pd.mag, reserve: pd.reserve }];
       this.cur = 0;
+      this.windOut = false;
+      this.wind.mag = DW.WIND_CHARGES;
       this.pos.fromArray(pos);
       this.vel.set(0, 0, 0);
       this.gunRoot.visible = true;

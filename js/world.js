@@ -56,6 +56,7 @@
       this.aoes = [];
       this.fx = [];        // timed visual effects {t, update(dt)->bool}
       this.grenadesLive = [];
+      this.winds = [];
       this.boxState = 'idle';
       this.boxRollT = 0;
       this.boxChoice = '';
@@ -64,6 +65,10 @@
       this.paused = false;
       this.relocations = 0;
       this.myGraceT = 0;
+      this.waveTotal = 0;
+      this.remainingNet = 0;
+      this.reviveIn = null; // {by, p, t} someone reviving us
+      this.reviveSendT = 0;
       this.navT = 0;
 
       this.scene = new THREE.Scene();
@@ -99,7 +104,10 @@
       const def = this.mapDef, s = this.scene;
       s.background = M.color(def.sky);
       s.fog = new THREE.FogExp2(M.color(def.fog), def.fog_density);
-      s.add(new THREE.AmbientLight(M.color(def.ambient), def.ambient_energy * 1.35));
+      this.ambient = new THREE.AmbientLight(M.color(def.ambient), def.ambient_energy * 1.35);
+      s.add(this.ambient);
+      this.baseFog = { color: M.color(def.fog), density: def.fog_density };
+      this.darkness = 0;
       if (def.moon > 0) {
         const moon = new THREE.DirectionalLight(M.color([0.6, 0.7, 1.0]), def.moon);
         // Godot rotation (-55, 35, 0) degrees: light travels along -Z of that basis
@@ -115,6 +123,7 @@
         moon.shadow.normalBias = 0.03;
         s.add(moon);
         s.add(moon.target);
+        this.moon = moon;
       }
       // fixed pool of point lights (changing the light count would recompile every shader)
       this.lampLights = [];
@@ -126,7 +135,10 @@
       this.muzzleLight = new THREE.PointLight(0xffcc73, 0, 6, 1.5);
       this.boomLight = new THREE.PointLight(0xff9a4d, 0, 10, 1.5);
       this.puLights = [new THREE.PointLight(0xffffff, 0, 4, 1.3), new THREE.PointLight(0xffffff, 0, 4, 1.3)];
-      s.add(this.muzzleLight, this.boomLight, ...this.puLights);
+      this.remoteLight = new THREE.PointLight(0xffcc73, 0, 6, 1.5); // teammates' muzzle flashes
+      this.darkLight = new THREE.PointLight(0x8fb4ff, 0, 7, 1.6);     // faint glow around you when the lights are out
+      s.add(this.darkLight);
+      s.add(this.muzzleLight, this.boomLight, this.remoteLight, ...this.puLights);
     }
 
     buildFx() {
@@ -151,6 +163,18 @@
     // ---------------------------------------------------------------- lights each frame
     updateLights(dt) {
       const cam = this.player.camera.position;
+      // the Goon Lord puts out almost every light while it lives
+      const goon = [...this.zombies.values()].some(z => z.ztype === 'goonlord' && !z.dead);
+      this.darkness = DW.moveToward(this.darkness, goon ? 1 : 0, dt * (goon ? 0.5 : 0.8));
+      const dk = this.darkness, def = this.mapDef;
+      this.ambient.intensity = def.ambient_energy * 1.35 * (1 - 0.8 * dk);
+      if (this.moon) this.moon.intensity = def.moon * (1 - 0.9 * dk);
+      this.scene.fog.density = this.baseFog.density * (1 + 1.4 * dk);
+      this.scene.fog.color.copy(this.baseFog.color).multiplyScalar(1 - 0.85 * dk);
+      this.scene.background.copy(M.color(def.sky)).multiplyScalar(1 - 0.9 * dk);
+      this.darkLight.position.set(cam.x, cam.y + 0.3, cam.z);
+      this.darkLight.intensity = 0.7 * dk;
+      this.player.vmAmbient.intensity = this.player.vmAmbientBase * (1 - 0.7 * dk);
       const lamps = this.info.lamps;
       const scored = lamps.map(l => [(l.pos[0] - cam.x) ** 2 + (l.pos[1] - cam.y) ** 2 + (l.pos[2] - cam.z) ** 2, l]);
       scored.sort((a, b) => a[0] - b[0]);
@@ -163,7 +187,9 @@
         L.distance = l.range;
         // fade out the farthest pooled light so swaps aren't visible
         const fade = i >= this.lampLights.length - 2 ? 0.6 : 1;
-        L.intensity = l.energy * fade;
+        // in the dark only the nearest lamp survives, and it flickers
+        const flicker = i === 0 ? (Math.sin(this.elapsed * 23) * Math.sin(this.elapsed * 7.3) > 0.3 ? 0.15 : 0.6) : 0.04;
+        L.intensity = l.energy * fade * (1 - dk + dk * flicker);
       }
       const p = this.player;
       p.forward(_a);
@@ -171,6 +197,7 @@
       this.muzzleLight.intensity = p.flashEnergy;
       this.muzzleLight.color.set(p.active().id === 'plasma' ? 0x4dff80 : 0xffcc73);
       this.boomLight.intensity = DW.moveToward(this.boomLight.intensity, 0, dt * 20);
+      this.remoteLight.intensity = DW.moveToward(this.remoteLight.intensity, 0, dt * 60);
       // nearest power-ups get the two glow lights
       const pus = [...this.powerups.values()].sort((a, b) => a.node.position.distanceToSquared(cam) - b.node.position.distanceToSquared(cam));
       this.puLights.forEach((L, i) => {
@@ -196,6 +223,7 @@
       }
       if (this.paused && this.solo) return; // solo pause freezes the match
       this.elapsed += dt;
+      M.tickPap(this.elapsed);
       this.doubleT = Math.max(this.doubleT - dt, 0);
       this.instaT = Math.max(this.instaT - dt, 0);
       this.myGraceT = Math.max(this.myGraceT - dt, 0);
@@ -208,6 +236,7 @@
       this.updatePowerups(dt);
       this.updateBox(dt);
       this.updateGrenades(dt);
+      this.updateWinds(dt);
       this.updateFx(dt);
       if (this.online) {
         this.pstateT -= dt;
@@ -285,6 +314,12 @@
 
     playerCount() { return 1 + this.remotes.size; }
 
+    // zombies left this round (not spawned yet + alive); clients get it from the host's snapshot
+    remaining() {
+      if (!this.host) return this.state === 'wave' ? this.remainingNet || 0 : 0;
+      return this.state === 'wave' ? this.toSpawn + this.bossQueue.length + this.zombies.size : 0;
+    }
+
     // ---------------------------------------------------------------- waves
     static zombieHp(w) { return w < 10 ? 150 + 100 * (w - 1) : 950 * Math.pow(1.1, w - 9); }
 
@@ -296,7 +331,10 @@
       this.toSpawn = Math.floor(base * (1 + 0.6 * (n - 1)));
       this.bossQueue = [];
       const every = this.diff.boss_every;
-      if (this.wave % every === 0) {
+      if (this.wave >= DW.GOON_WAVE && (this.wave - DW.GOON_WAVE) % 10 === 0) {
+        this.bossQueue.push('goonlord');
+        this.toSpawn = Math.floor(this.toSpawn * 0.5);
+      } else if (this.wave % every === 0) {
         const bi = this.wave / every;
         this.bossQueue.push(bi % 2 === 1 ? 'brute' : 'spitter');
         if (bi >= 3) this.bossQueue.push(bi % 2 === 1 ? 'spitter' : 'brute');
@@ -304,16 +342,21 @@
       }
       this.state = 'wave';
       this.spawnT = 2.5;
+      this.waveTotal = this.toSpawn + this.bossQueue.length;
       const boss = this.bossQueue.length > 0;
-      Net.sendAll('wave', { n: this.wave, boss });
-      this.onWaveStart(this.wave, boss);
+      const goon = this.bossQueue.includes('goonlord');
+      Net.sendAll('wave', { n: this.wave, boss, goon });
+      this.onWaveStart(this.wave, boss, goon);
     }
 
-    onWaveStart(n, boss) {
+    onWaveStart(n, boss, goon) {
       this.wave = n;
       this.state = 'wave';
       Sfx.play('wave_start', 2);
-      if (boss) this.hud.centerMsg(`WAVE ${n}\nBOSS INCOMING`, [1.0, 0.2, 0.15], 3.5);
+      if (goon) {
+        this.hud.centerMsg(`WAVE ${n}\nTHE GOON LORD HAS RISEN\nThe lights are going out...`, [0.7, 0.95, 1.0], 5);
+        Sfx.play('growl_boss', 6, 0.45);
+      } else if (boss) this.hud.centerMsg(`WAVE ${n}\nBOSS INCOMING`, [1.0, 0.2, 0.15], 3.5);
       else this.hud.centerMsg(`WAVE ${n}`, [0.85, 0.1, 0.08], 2.5);
       if (this.player.dead) this.player.respawn(this.respawnPoint());
       if (n === DW.BOX_UNLOCK_WAVE && this.info.boxes.length) {
@@ -361,6 +404,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       if (type === 'runner') spd = DW.randf(4.0, 4.9);
       else if (type === 'brute') { hp = Math.max(6000, hp * 16) * (1 + 0.6 * (n - 1)); spd = 3.1; dmg = 65; }
       else if (type === 'spitter') { hp = Math.max(5000, hp * 13) * (1 + 0.6 * (n - 1)); spd = 2.7; dmg = 42; }
+      else if (type === 'goonlord') { hp = Math.max(45000, hp * 45) * (1 + 0.7 * (n - 1)); spd = 3.3; dmg = 95; }
       const id = this.nextZid++;
       const z = new DW.Zombie(this, id, type, hp, spd * this.diff.spd, dmg * this.diff.dmg, false, pos);
       this.zombies.set(id, z);
@@ -412,6 +456,105 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const out = [];
       for (const e of this.allPlayers('all')) if (!e.dead && (e.down || e.grace > 0)) out.push(e.pos);
       return out;
+    }
+
+    // Goon Lord screech: a few runners claw out of the ground around it (host only)
+    goonScreech(z) {
+      Sfx.play3d('growl_boss', [z.pos.x, z.pos.y + 3, z.pos.z], 10, 0.4, 120);
+      Net.sendAll('fx', { k: 'screech' });
+      this.hud.centerMsg('THE GOON LORD SCREECHES', [0.7, 0.95, 1.0], 2);
+      for (let i = 0; i < 3 && this.zombies.size < MAX_ALIVE + 4; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const x = z.pos.x + Math.cos(a) * 3, zz = z.pos.z + Math.sin(a) * 3;
+        const [ci, cj] = this.nav.cellOf(x, zz);
+        if (!this.nav.walkable(ci, cj)) continue;
+        this.spawnZombie('runner', [x, 0.1, zz]);
+        this.waveTotal++;
+      }
+    }
+
+    // ---------------------------------------------------------------- wind charge
+    launchWind(from, dir, mine) {
+      const mesh = new THREE.Group();
+      const shell = new THREE.Mesh(M.ballGeo(0.22, 10), new THREE.MeshBasicMaterial({ color: M.color([0.8, 0.95, 1.0]), transparent: true, opacity: 0.45, depthWrite: false }));
+      const core = new THREE.Mesh(M.ballGeo(0.1, 8), M.mat([0.6, 0.95, 1.0], 3, 0, 1, true));
+      mesh.add(shell, core);
+      mesh.position.copy(from);
+      this.scene.add(mesh);
+      this.winds.push({ mesh, vel: dir.clone().multiplyScalar(26), t: 1.0, mine });
+    }
+
+    updateWinds(dt) {
+      for (const wc of this.winds.slice()) {
+        wc.t -= dt;
+        const p = wc.mesh.position;
+        wc.mesh.rotation.y += dt * 12;
+        wc.mesh.rotation.x += dt * 7;
+        const speed = wc.vel.length(), dir = _a.copy(wc.vel).multiplyScalar(1 / speed), step = speed * dt;
+        let hitT = -1;
+        const sh = this.phys.raycast(p, dir, step + 0.2);
+        if (sh) hitT = Math.max(sh.t - 0.15, 0);
+        for (const z of this.zombies.values()) {
+          if (z.dead) continue;
+          const zc = _b.set(z.pos.x, z.pos.y + 1.0 * z.s, z.pos.z);
+          if (zc.distanceTo(p) < 0.6 * z.s + 0.3) { hitT = 0; break; }
+        }
+        if (hitT >= 0 || wc.t <= 0) {
+          if (hitT > 0) p.addScaledVector(dir, hitT);
+          this.scene.remove(wc.mesh);
+          this.winds.splice(this.winds.indexOf(wc), 1);
+          if (wc.mine) this.windBlast(p.clone(), true);
+          continue;
+        }
+        p.addScaledVector(dir, step);
+      }
+    }
+
+    // knocks zombies back; mine = we fired it (tell everyone, host moves the zombies)
+    windBlast(pos, mine) {
+      Sfx.play3d('wind_blast', pos, 6);
+      this.burst(pos, [0.85, 0.95, 1.0], 30, 7, 0.5);
+      this.burst(pos, [0.5, 0.85, 1.0], 16, 4, 0.7);
+      const ring = new THREE.Mesh(M.ballGeo(1, 16), new THREE.MeshBasicMaterial({ color: M.color([0.8, 0.95, 1.0]), transparent: true, opacity: 0.35, depthWrite: false, wireframe: true }));
+      ring.position.copy(pos);
+      this.scene.add(ring);
+      let t = 0;
+      this.fx.push(dt => {
+        t += dt;
+        const k = t / 0.35;
+        ring.scale.setScalar(0.3 + k * 4.5);
+        ring.material.opacity = 0.35 * (1 - k);
+        if (k >= 1) { this.scene.remove(ring); ring.material.dispose(); return false; }
+        return true;
+      });
+      if (mine) {
+        this.player.windKnock(pos);
+        Net.sendAll('wind', { p: arr(pos) });
+      }
+      if (this.host) this.windPush(pos);
+    }
+
+    windPush(pos) {
+      const R = 5.5;
+      for (const z of this.zombies.values()) {
+        if (z.dead) continue;
+        const dx = z.pos.x - pos.x, dz = z.pos.z - pos.z;
+        const d = Math.hypot(dx, dz, z.pos.y + z.s - pos.y);
+        if (d > R) continue;
+        const h = Math.hypot(dx, dz) || 1;
+        const push = (16 * (1 - d / R) + 6) / Math.max(1, z.s);
+        z.knockX = (z.knockX || 0) + dx / h * push;
+        z.knockZ = (z.knockZ || 0) + dz / h * push;
+        z.flinch(false);
+      }
+    }
+
+    papFx(pos) {
+      Sfx.play('pickup', 4, 0.7);
+      Sfx.play('box_spin', -4, 1.6);
+      this.burst(new THREE.Vector3(pos[0], 1.5, pos[2]), [0.3, 1.0, 0.6], 40, 4, 0.9);
+      this.burst(new THREE.Vector3(pos[0], 1.5, pos[2]), [0.9, 1.0, 1.0], 25, 3, 0.9);
+      this.hud.centerMsg('PACK-A-POONCHED!', [0.3, 1.0, 0.6], 2.5);
     }
 
     onLocalRevive() {
@@ -521,7 +664,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     applyDamage(zid, dmg, head, by, knife) {
       const z = this.zombies.get(zid);
       if (!z || z.dead) return;
-      if (this.instaT > 0 && !z.isBoss()) dmg = z.hp + 1;
+      // insta-kill: normal zombies die in one hit, bosses take double damage
+      if (this.instaT > 0) dmg = z.isBoss() ? dmg * 2 : z.hp + 1;
       z.hp -= dmg;
       z.hpFrac = DW.clamp(z.hp / z.maxHp, 0, 1);
       if (z.isBoss() && !z.enraged && z.hpFrac <= 0.5 && z.hp > 0) {
@@ -536,7 +680,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const z = this.zombies.get(zid);
       if (!z) return;
       const pos = [z.pos.x, z.pos.y, z.pos.z];
-      const msg = { z: zid, by, h: head, kn: knife, nk: nuke, b: z.isBoss(), p: pos };
+      const msg = { z: zid, by, h: head, kn: knife, nk: nuke, b: z.isBoss(), gl: z.ztype === 'goonlord', p: pos };
       Net.sendAll('zkill', msg);
       this.onZkill(msg);
       if (nuke) return;
@@ -561,13 +705,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         p.kills++;
         if (head) p.headshots++;
         this.hud.hitMarker(head, true);
-        if (msg.b) { p.bosses++; p.addPoints(500); }
+        if (msg.b) { p.bosses++; p.addPoints(msg.gl ? 2500 : 500); }
         else if (msg.kn) p.addPoints(130);
         else p.addPoints(head ? 100 : 60);
       }
       if (msg.b) {
-        this.hud.centerMsg('BOSS DOWN', [1.0, 0.8, 0.3], 2.5);
-        if (msg.by !== Net.myId) p.addPoints(200);
+        this.hud.centerMsg(msg.gl ? 'THE GOON LORD IS DEAD\nThe lights come back on' : 'BOSS DOWN', [1.0, 0.8, 0.3], msg.gl ? 4 : 2.5);
+        if (msg.by !== Net.myId) p.addPoints(msg.gl ? 1000 : 200);
       }
     }
 
@@ -636,7 +780,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       for (const [id, r] of this.remotes) {
         if (r.down && !r.dead && r.posV.distanceTo(pp) < 2.3) {
           const t = p.perks.includes('wind') ? 1.5 : 3.0;
-          return { text: `Hold E to revive ${r.name}`, hold: t, action: () => this.reviveRemote(id) };
+          return { text: `Hold E to revive ${r.name}`, hold: t, revive: id, action: () => this.reviveRemote(id) };
         }
       }
       for (let i = 0; i < this.info.doors.length; i++) {
@@ -659,9 +803,35 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       for (const bx of this.info.boxes) {
         if (Math.hypot(bx.pos[0] - pp.x, bx.pos[1] - pp.y, bx.pos[2] - pp.z) < 2.2) {
           if (this.wave < DW.BOX_UNLOCK_WAVE) return { text: `The Mystery Box opens on wave ${DW.BOX_UNLOCK_WAVE}` };
+          if (this.boxState !== 'idle' && this.boxOwner !== Net.myId) {
+            const who = Net.persona(this.boxOwner);
+            return { text: this.boxState === 'rolling' ? `${who} is spinning the box...` : `${who}'s ${DW.WEAPONS[this.boxChoice].name}` };
+          }
           if (this.boxState === 'rolling') return { text: 'The box is spinning...' };
           if (this.boxState === 'ready') return { text: `Press E to take ${DW.WEAPONS[this.boxChoice].name}`, action: () => this.takeBoxWeapon() };
           return { text: `Press E for a random weapon  [${DW.BOX_COST}]`, cost: DW.BOX_COST, action: () => this.buyBox() };
+        }
+      }
+      for (const pa of this.info.paps) {
+        if (Math.hypot(pa.pos[0] - pp.x, pa.pos[2] - pp.z) < 2.2) {
+          const a = p.active(), wd = DW.WEAPONS[a.id];
+          if (a.id === 'wind') return { text: "The Pack-a-Poonch can't take the wind charge" };
+          if (a.pap) return { text: `Your ${wd.name} is already Pack-a-Poonched` };
+          return {
+            text: `Press E to Pack-a-Poonch your ${wd.name}  [${DW.PAP_COST}]\nGem finish, ${DW.PAP_DAMAGE}x damage, full ammo`, cost: DW.PAP_COST,
+            action: () => { if (p.spend(DW.PAP_COST)) { p.packAPunch(); this.papFx(pa.pos); } },
+          };
+        }
+      }
+      for (const gb of this.info.grenadeBuys) {
+        if (Math.hypot(gb.pos[0] - pp.x, gb.pos[2] - pp.z) < 2.0) {
+          const need = DW.MAX_GRENADES - p.grenades;
+          if (need <= 0) return { text: `Grenades full (${DW.MAX_GRENADES})` };
+          const cost = need * DW.GRENADE_COST;
+          return {
+            text: `Press E to fill grenades to ${DW.MAX_GRENADES} (+${need})  [${cost}]`, cost,
+            action: () => { if (p.spend(cost)) { p.grenades = DW.MAX_GRENADES; this.hud.centerMsg(`GRENADES x${DW.MAX_GRENADES}`, [1.0, 0.95, 0.8], 1.5); } },
+          };
         }
       }
       for (const pk of this.info.perks) {
@@ -706,8 +876,17 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       let total = 0;
       for (const w of pool) total += DW.BOX_WEIGHT[w] || 1;
       let roll = Math.random() * total;
-      this.boxChoice = pool[pool.length - 1];
-      for (const w of pool) { roll -= DW.BOX_WEIGHT[w] || 1; if (roll <= 0) { this.boxChoice = w; break; } }
+      let choice = pool[pool.length - 1];
+      for (const w of pool) { roll -= DW.BOX_WEIGHT[w] || 1; if (roll <= 0) { choice = w; break; } }
+      this.startBox(Net.myId, choice);
+      Net.sendAll('box', { s: 'roll', c: choice });
+    }
+
+    // Everyone sees the same spin; only the owner can take the gun.
+    startBox(owner, choice) {
+      if (this.boxState !== 'idle') this.closeBox();
+      this.boxOwner = owner;
+      this.boxChoice = choice;
       this.boxState = 'rolling';
       this.boxRollT = 2.6;
       this.boxSwapT = 0;
@@ -716,6 +895,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       this.boxHolder.position.set(bp[0], 0.95, bp[2]);
       this.scene.add(this.boxHolder);
       Sfx.play3d('box_spin', this.boxHolder.position, 0);
+    }
+
+    closeBox() {
+      this.boxState = 'idle';
+      this.boxOwner = null;
+      if (this.boxHolder) this.scene.remove(this.boxHolder);
+      this.boxHolder = null;
     }
 
     boxShow(id) {
@@ -745,24 +931,34 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           this.boxShow(this.boxChoice);
           this.boxState = 'ready';
           this.boxRollT = 9;
-          Sfx.play('pickup');
+          if (this.boxOwner === Net.myId) Sfx.play('pickup');
+          else this.hud.centerMsg(`${Net.persona(this.boxOwner)} rolled the ${DW.WEAPONS[this.boxChoice].name}`, [0.6, 0.85, 1.0], 2.5);
         }
       } else if (this.boxState === 'ready') {
         h.position.y += Math.sin(this.elapsed * 3) * dt * 0.1;
         if (this.boxRollT <= 0) {
-          this.boxState = 'idle';
-          this.scene.remove(h);
-          this.hud.centerMsg('The box closed', [0.6, 0.85, 1.0], 1.5);
+          const mine = this.boxOwner === Net.myId;
+          this.closeBox();
+          if (mine) this.hud.centerMsg('The box closed', [0.6, 0.85, 1.0], 1.5);
         }
       }
     }
 
     takeBoxWeapon() {
-      if (this.boxState !== 'ready') return;
+      if (this.boxState !== 'ready' || this.boxOwner !== Net.myId) return;
       this.player.giveWeapon(this.boxChoice);
       this.hud.centerMsg(DW.WEAPONS[this.boxChoice].name.toUpperCase(), [0.6, 0.85, 1.0], 2);
-      this.boxState = 'idle';
-      this.scene.remove(this.boxHolder);
+      Net.sendAll('box', { s: 'take', c: this.boxChoice });
+      this.closeBox();
+    }
+
+    // while holding E on a downed teammate: let them (and everyone) see the progress
+    sendReviving(id, p) {
+      const r = this.remotes.get(id);
+      if (r) { r.reviveAt = this.elapsed; r.reviveP = p; }
+      if (this.elapsed - this.reviveSendT < 0.1) return;
+      this.reviveSendT = this.elapsed;
+      Net.sendAll('rv', { t: id, p: Math.round(p * 100) / 100 }, false);
     }
 
     reviveRemote(id) {
@@ -834,10 +1030,26 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       if (p.pos.distanceTo(at) < 3 && this.hasLine(from, _b.set(p.pos.x, p.pos.y + 1, p.pos.z))) p.takeDamage(20, [at.x, at.y, at.z]);
     }
 
-    onLocalFire() {}
+    // tell teammates where our shots went so they can draw them
+    onLocalFire(id, ends, plasma) {
+      if (!this.online) return;
+      Net.sendAll('sh', { e: ends.slice(0, 8).map(arr), p: !!plasma }, false);
+    }
+
+    showRemoteShot(r, ends, plasma) {
+      r.flash = 3;
+      const wd = DW.WEAPONS[r.w] || DW.WEAPONS.pistol;
+      Sfx.play3d(wd.snd, [r.pos[0], r.pos[1] + 1.4, r.pos[2]], -4);
+      const m = r.gun && r.gun.userData.muzzle;
+      const from = m ? r.gun.localToWorld(new THREE.Vector3(m[0], m[1], m[2])) : new THREE.Vector3(r.pos[0], r.pos[1] + 1.4, r.pos[2]);
+      for (const e of ends) if (Array.isArray(e)) this.tracer(from, v3(e), plasma);
+      this.remoteLight.position.copy(from);
+      this.remoteLight.color.set(plasma ? 0x4dff80 : 0xffcc73);
+      this.remoteLight.intensity = 3;
+    }
 
     announceEnrage(type) {
-      this.hud.centerMsg(`THE ${type === 'brute' ? 'BRUTE' : 'ABOMINATION'} IS ENRAGED`, [1.0, 0.35, 0.1], 2.5);
+      this.hud.centerMsg(type === 'goonlord' ? 'THE GOON LORD IS ENRAGED' : `THE ${DW.BOSS_NAMES[type] || 'BOSS'} IS ENRAGED`, [1.0, 0.35, 0.1], 2.5);
       Sfx.play('wave_start', 0, 1.4);
     }
 
@@ -948,20 +1160,25 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       return r;
     }
 
-    setRemoteGun(r, id) {
-      if (r.w === id && r.gun) return;
+    setRemoteGun(r, id, pap = false) {
+      if (r.w === id && r.pap === pap && r.gun) return;
       r.w = id;
+      r.pap = pap;
       if (r.gun) r.rig.gun_mount.remove(r.gun);
-      const g = M.gun(id);
-      M.bake(g);
+      const g = M.gun(id, false, pap);
+      if (!pap) M.bake(g);
       r.rig.gun_mount.add(g);
       r.gun = g;
+      const fcol = id !== 'plasma' ? [1.0, 0.8, 0.35] : [0.4, 1.0, 0.5];
+      r.flashMesh = M.box(g, g.userData.muzzle, [0.12, 0.12, 0.16], M.mat(fcol, 8, 0, 1, true), [0, 0, Math.PI / 4]);
+      r.flashMesh.visible = false;
     }
 
     updateRemotes(dt) {
       for (const r of this.remotes.values()) {
         r.stale += dt;
         r.graceT = Math.max((r.graceT || 0) - dt, 0);
+        if (r.down) r.bleedT = Math.max((r.bleedT || 0) - dt, 0);
         const node = r.node;
         const bx = node.position.x, bz = node.position.z;
         node.position.lerp(r.target, Math.min(1, dt * 14));
@@ -974,12 +1191,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         const sw = Math.sin(r.walk) * 0.6 * moving;
         rig.leg_l.rotation.x = sw;
         rig.leg_r.rotation.x = -sw;
-        rig.knee_l.rotation.x = Math.max(0, -Math.sin(r.walk - 0.6)) * 0.8 * moving;
-        rig.knee_r.rotation.x = Math.max(0, Math.sin(r.walk - 0.6)) * 0.8 * moving;
+        rig.knee_l.rotation.x = -Math.max(0, -Math.sin(r.walk - 0.6)) * 0.8 * moving;
+        rig.knee_r.rotation.x = -Math.max(0, Math.sin(r.walk - 0.6)) * 0.8 * moving;
         rig.spine.rotation.x = DW.lerp(rig.spine.rotation.x, DW.clamp(r.pitch, -0.8, 0.8) * 0.6, Math.min(1, dt * 10));
         r.body.rotation.x = DW.lerp(r.body.rotation.x, r.down ? 1.35 : 0, Math.min(1, dt * 6));
         r.body.position.y = DW.lerp(r.body.position.y, r.down ? 0.3 : 0, Math.min(1, dt * 6));
         r.flash = DW.moveToward(r.flash, 0, dt * 40);
+        if (r.flashMesh) r.flashMesh.visible = r.flash > 1.5;
         const key = r.name + (r.down ? '|d' : '');
         if (key !== r.labelKey) {
           r.labelKey = key;
@@ -993,7 +1211,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const p = this.player;
       Net.sendAll('ps', {
         p: arr(p.pos), y: Math.round(p.yaw * 1000) / 1000, x: Math.round(p.pitch * 1000) / 1000, w: p.active().id,
-        dn: p.downed, dd: p.dead, f: p.firedFlag > 0.1,
+        dn: p.downed, dd: p.dead, f: p.firedFlag > 0.1, bt: Math.round(p.bleedT), pp: !!p.active().pap,
         s: p.points, k: p.kills, hs: p.headshots, d: p.downs,
       }, reliable);
     }
@@ -1023,13 +1241,15 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (z.dead) continue;
         a.push(id, DW.ZTYPES.indexOf(z.ztype), z.pos.x, z.pos.y, z.pos.z, z.yaw, z.hpFrac, z.swing);
       }
-      Net.sendAll('zs', { a: new Float32Array(a), w: this.wave, st: this.state, t: this.stateT }, false);
+      Net.sendAll('zs', { a: new Float32Array(a), w: this.wave, st: this.state, t: this.stateT, rem: this.remaining(), tot: this.waveTotal }, false);
     }
 
     applySnapshot(data) {
       const a = data.a;
       this.state = data.st || this.state;
       this.stateT = data.t;
+      this.remainingNet = data.rem | 0;
+      this.waveTotal = data.tot | 0;
       const seen = new Set();
       for (let i = 0; i + 7 < a.length; i += 8) {
         const id = Math.round(a[i]);
@@ -1037,7 +1257,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         seen.add(id);
         let z = this.zombies.get(id);
         if (!z) {
-          const type = DW.ZTYPES[DW.clamp(Math.round(a[i + 1]), 0, 3)];
+          const type = DW.ZTYPES[DW.clamp(Math.round(a[i + 1]), 0, DW.ZTYPES.length - 1)];
           z = new DW.Zombie(this, id, type, 100, type !== 'runner' ? 2.0 : 4.5, 0, true, [a[i + 2], a[i + 3], a[i + 4]]);
           this.zombies.set(id, z);
         }
@@ -1064,7 +1284,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           if (Array.isArray(d.p)) { r.pos = d.p; r.target.fromArray(d.p); }
           r.yaw = +d.y || 0;
           r.pitch = +d.x || 0;
-          this.setRemoteGun(r, DW.WEAPONS[d.w] ? d.w : 'pistol');
+          this.setRemoteGun(r, DW.WEAPONS[d.w] ? d.w : 'pistol', !!d.pp);
+          r.bleedT = +d.bt || 0;
           const wasDown = r.down;
           r.down = !!d.dn;
           if (wasDown && !r.down) r.graceT = 3.0;
@@ -1072,25 +1293,47 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           r.points = d.s | 0; r.kills = d.k | 0; r.hs = d.hs | 0; r.downs = d.d | 0;
           r.stale = 0;
           r.name = Net.persona(sender);
-          if (r.down && !wasDown) this.hud.centerMsg(`${r.name} IS DOWN`, [1.0, 0.4, 0.3], 2);
-          if (d.f && r.flash < 0.5) {
-            r.flash = 3;
-            const wd = DW.WEAPONS[r.w] || DW.WEAPONS.pistol;
-            Sfx.play3d(wd.snd, [r.pos[0], r.pos[1] + 1.4, r.pos[2]], -4);
+          if (r.down && !wasDown) {
+            this.hud.centerMsg(`${r.name} IS DOWN\nFollow the red marker to revive`, [1.0, 0.4, 0.3], 3);
+            Sfx.play('hurt', 0, 0.5);
           }
+          if (wasDown && !r.down && !r.dead) this.hud.centerMsg(`${r.name} IS BACK UP`, [0.5, 1.0, 0.5], 1.5);
           break;
         }
+        case 'sh': {
+          const r = this.remotes.get(sender);
+          if (r && Array.isArray(d.e)) this.showRemoteShot(r, d.e, !!d.p);
+          break;
+        }
+        case 'wind':
+          if (Array.isArray(d.p)) {
+            const wp = v3(d.p);
+            this.windBlast(wp, false);
+            this.player.windKnock(wp);
+          }
+          break;
+        case 'rv':
+          if (d.t === Net.myId) this.reviveIn = { by: sender, p: +d.p || 0, t: this.elapsed };
+          else if (this.remotes.has(d.t)) { const r = this.remotes.get(d.t); r.reviveAt = this.elapsed; r.reviveP = +d.p || 0; }
+          break;
         case 'zs': if (!this.host) this.applySnapshot(d); break;
         case 'zkill': if (!this.host) this.onZkill(d); break;
         case 'hit': if (this.host) this.applyDamage(d.z, Math.min(+d.d, 20000), !!d.h, sender, !!d.kn); break;
         case 'pdmg': this.player.takeDamage(+d.d, Array.isArray(d.f) ? d.f : null); break;
-        case 'wave': if (!this.host) this.onWaveStart(d.n | 0, !!d.boss); break;
+        case 'wave': if (!this.host) this.onWaveStart(d.n | 0, !!d.boss, !!d.goon); break;
         case 'wave_end': if (!this.host) this.onWaveEnd(); break;
         case 'aoe': if (!this.host) this.showAoe(d.p, +d.r, +d.t, String(d.k)); break;
         case 'pu': if (!this.host) this.spawnPu(d.i, String(d.t), d.p); break;
         case 'pu_take': if (this.host) this.takePu(d.i); break;
         case 'pu_fx': if (!this.host) this.applyPu(d.i, String(d.t)); break;
         case 'door': this.openDoor(d.i | 0); break;
+        case 'box':
+          if (d.s === 'roll' && DW.WEAPONS[d.c]) this.startBox(sender, d.c);
+          else if (d.s === 'take' && this.boxOwner === sender) {
+            this.hud.centerMsg(`${Net.persona(sender)} took the ${DW.WEAPONS[d.c] ? DW.WEAPONS[d.c].name : 'gun'}`, [0.6, 0.85, 1.0], 2);
+            this.closeBox();
+          }
+          break;
         case 'revive':
           if (d.t === Net.myId) this.player.revive();
           else if (this.remotes.has(d.t)) { this.remotes.get(d.t).down = false; this.remotes.get(d.t).graceT = 3.0; }
@@ -1098,6 +1341,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         case 'fx':
           if (d.k === 'boom' && Array.isArray(d.p)) this.explode(v3(d.p), false);
           else if (d.k === 'enrage') this.announceEnrage(String(d.t));
+          else if (d.k === 'screech') { this.hud.centerMsg('THE GOON LORD SCREECHES', [0.7, 0.95, 1.0], 2); Sfx.play('growl_boss', 4, 0.4); }
           break;
         case 'over': this.endGame(String(d.why || 'Game over.')); break;
         case 'bye': this.playerLeft(sender); break;

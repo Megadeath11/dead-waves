@@ -20,6 +20,8 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **3 maps**: Outpost (open moonlit yard), Bunker (underground corridors), Factory (big hall, three wings). Buyable doors open new zones.
 - **10 guns** with no spread: every bullet goes exactly where the dot is, standing, running or aiming. Wall-buys (M9, M14, Pump Shotgun, MP5, AK-47) and the **Mystery Box** (LMG, Desert Hawk, Barrett .50, Plasma Caster, Death Machine).
 - **4 perks**: Iron Hide, Fast Hands, Double Tap, Second Wind. **Power-ups**: Max Ammo, Double Points, Insta-Kill, Nuke.
+- **Pack-a-Poonch** desk (20,000): gem finish and 4x damage. **Grenade wall-buy** fills you up to 10. **Wind charge** on key 3.
+- **The Goon Lord** (the Wendygoon) rises on wave 20 and puts the lights out.
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
@@ -36,6 +38,7 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 | Switch weapon | 1, 2, Q or mouse wheel |
 | Knife | V or middle mouse |
 | Grenade | G |
+| Wind charge (knock zombies back, shoot at your feet to launch yourself) | 3 |
 | Buy / open door / revive (hold) | E or F |
 | Scoreboard | Tab |
 | Menu / settings | Esc |

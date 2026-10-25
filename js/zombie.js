@@ -4,7 +4,7 @@
 (function () {
   const M = DW.Models;
   const RISE_TIME = 1.3;
-  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35 };
+  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35, goonlord: 2.2 };
   const _p = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
   class Zombie {
@@ -45,7 +45,8 @@
       this.pos = this.root.position;
       this.bodyRoot = M.joint(this.root, [0, 0, 0]);
       this.bodyRoot.scale.setScalar(this.s);
-      this.rig = M.zombie(this.bodyRoot, type, DW.rng(id * 7919 + 13));
+      this.rig = type === 'goonlord' ? M.wendygoon(this.bodyRoot, DW.rng(id * 7919 + 13)) : M.zombie(this.bodyRoot, type, DW.rng(id * 7919 + 13));
+      this.lungeT = 0; this.lungeCd = 4; this.screechT = 10;
       M.bake(this.bodyRoot);
       world.scene.add(this.root);
       this.lastPos = this.pos.clone();
@@ -55,7 +56,7 @@
 
     get yaw() { return this.root.rotation.y; }
     set yaw(v) { this.root.rotation.y = v; }
-    isBoss() { return this.ztype === 'brute' || this.ztype === 'spitter'; }
+    isBoss() { return this.ztype === 'brute' || this.ztype === 'spitter' || this.ztype === 'goonlord'; }
 
     // Ray test against body capsule and head sphere. Returns {t, head} or null.
     hitTest(ro, rd, maxT) {
@@ -78,6 +79,8 @@
 
     flinch(head) { this.flinchT = head ? 1.4 : 1.0; }
 
+    // Limbs hang along -Y: a positive x rotation swings an arm forward (-Z, toward the target),
+    // bends an elbow and lifts a knee forward, so knees use negative values to bend back.
     animate(dt, moving) {
       const rig = this.rig;
       this.animT += dt * (2.2 + this.speed * 1.5) * Math.max(moving, 0.15);
@@ -89,36 +92,46 @@
       const sw = Math.sin(t) * 0.65 * moving;
       rig.leg_l.rotation.x = sw;
       rig.leg_r.rotation.x = -sw;
-      rig.knee_l.rotation.x = Math.max(0, -Math.sin(t - 0.6)) * 0.9 * moving + 0.05;
-      rig.knee_r.rotation.x = Math.max(0, Math.sin(t - 0.6)) * 0.9 * moving + 0.05;
+      rig.knee_l.rotation.x = -(Math.max(0, -Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
+      rig.knee_r.rotation.x = -(Math.max(0, Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
       rig.hips.position.y = 0.95 - Math.abs(Math.sin(t)) * 0.04 * moving;
       const spine = rig.spine, swing = this.swing;
       if (this.ztype === 'runner') {
         spine.rotation.x = -0.35 * Math.max(moving, 0.3);
-        rig.arm_l.rotation.x = Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.4;
-        rig.arm_r.rotation.x = -Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.6;
-        rig.elbow_l.rotation.x = -0.9;
-        rig.elbow_r.rotation.x = -0.9;
+        rig.arm_l.rotation.x = -(Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.4);
+        rig.arm_r.rotation.x = -(-Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.6);
+        rig.elbow_l.rotation.x = 0.9;
+        rig.elbow_r.rotation.x = 0.9;
       } else if (this.ztype === 'brute') {
         spine.rotation.x = -0.15;
-        rig.arm_l.rotation.x = -0.3 + Math.sin(t) * 0.35 * moving - swing * 2.2;
-        rig.arm_r.rotation.x = -0.3 - Math.sin(t) * 0.35 * moving - swing * 2.4;
+        rig.arm_l.rotation.x = -(-0.3 + Math.sin(t) * 0.35 * moving - swing * 2.2);
+        rig.arm_r.rotation.x = -(-0.3 - Math.sin(t) * 0.35 * moving - swing * 2.4);
         rig.arm_l.rotation.z = -0.25;
         rig.arm_r.rotation.z = 0.25;
-        rig.elbow_l.rotation.x = -0.5 + swing * 0.4;
-        rig.elbow_r.rotation.x = -0.5 + swing * 0.4;
+        rig.elbow_l.rotation.x = -(-0.5 + swing * 0.4);
+        rig.elbow_r.rotation.x = -(-0.5 + swing * 0.4);
+      } else if (this.ztype === 'goonlord') {
+        // hunched, arms hanging long and low; during a lunge the claws go out in front
+        const lunge = this.lungeT > 0 ? 1 : 0;
+        spine.rotation.x = -0.45 + Math.sin(t * 0.5) * 0.05;
+        rig.arm_l.rotation.x = 0.35 + Math.sin(t) * 0.25 * moving + swing * 1.6 + lunge * 1.0;
+        rig.arm_r.rotation.x = 0.35 - Math.sin(t) * 0.25 * moving + swing * 1.9 + lunge * 1.0;
+        rig.arm_l.rotation.z = -0.12;
+        rig.arm_r.rotation.z = 0.12;
+        rig.elbow_l.rotation.x = 0.3 + swing * 0.5;
+        rig.elbow_r.rotation.x = 0.3 + swing * 0.5;
       } else {
         const reach = -1.3 + Math.sin(t * 0.5) * 0.12;
-        rig.arm_l.rotation.x = reach + swing * 1.5 + Math.sin(t * 0.7) * 0.08;
-        rig.arm_r.rotation.x = reach - 0.12 + swing * 1.9;
-        rig.elbow_l.rotation.x = -0.2 - swing * 0.6;
-        rig.elbow_r.rotation.x = -0.3 - swing * 0.7;
-        spine.rotation.x = this.ztype === 'walker' ? 0.08 : 0.25;
+        rig.arm_l.rotation.x = -(reach + swing * 1.5 + Math.sin(t * 0.7) * 0.08);
+        rig.arm_r.rotation.x = -(reach - 0.12 + swing * 1.9);
+        rig.elbow_l.rotation.x = -(-0.2 - swing * 0.6);
+        rig.elbow_r.rotation.x = -(-0.3 - swing * 0.7);
+        spine.rotation.x = this.ztype === 'walker' ? -0.12 : 0.15; // walkers hunch forward, the bloated one leans back
       }
-      spine.rotation.x -= this.flinchT * 0.35;
+      spine.rotation.x += this.flinchT * 0.35; // jolt back when shot
       spine.rotation.z = Math.sin(t * 0.5) * 0.07 * (this.ztype !== 'runner' ? 1 : 0.4);
       rig.head.rotation.z = this.twitch * 0.25 + Math.sin(t * 0.5 + 1) * 0.06;
-      rig.head.rotation.x = -this.flinchT * 0.4 + (this.ztype === 'spitter' ? 0.15 : 0);
+      rig.head.rotation.x = this.flinchT * 0.4 + (this.ztype === 'spitter' ? 0.15 : 0);
       rig.jaw.rotation.x = 0.15 + Math.abs(Math.sin(t * 0.37)) * 0.25 + swing * 0.35;
     }
 
@@ -129,8 +142,8 @@
         const k = 1 - DW.clamp(this.riseT / RISE_TIME, 0, 1);
         this.bodyRoot.position.y = DW.lerp(-1.9 * this.s, 0, 1 - Math.pow(1 - k, 2));
         this.bodyRoot.rotation.x = (1 - k) * -0.5;
-        this.rig.arm_l.rotation.x = -2.6 * (1 - k) - 1.3 * k;
-        this.rig.arm_r.rotation.x = -2.9 * (1 - k) - 1.3 * k;
+        this.rig.arm_l.rotation.x = -(-2.6 * (1 - k) - 1.3 * k);
+        this.rig.arm_r.rotation.x = -(-2.9 * (1 - k) - 1.3 * k);
         if (this.puppet) this.pos.lerp(this.targetPos, Math.min(1, dt * 12));
         return;
       }
@@ -189,15 +202,16 @@
         if (dist < 5 || (mx === 0 && mz === 0)) { fx = tp.x - pos.x; fz = tp.z - pos.z; }
         if (Math.hypot(fx, fz) > 0.01) this.yaw = DW.lerpAngle(this.yaw, Math.atan2(-fx, -fz), Math.min(1, dt * 8));
         this.attackT -= dt;
-        const reach = (this.ztype !== 'brute' ? 1.45 : 2.5) * Math.min(this.s, 1.3);
+        const reach = (this.ztype === 'goonlord' ? 2.4 : this.ztype !== 'brute' ? 1.45 : 2.5) * Math.min(this.s, 1.3);
         if (dist < reach && this.attackT <= 0 && Math.abs(tp.y - pos.y) < 2 &&
             w.hasLine(_a.set(pos.x, pos.y + 1.2, pos.z), _b.set(tp.x, tp.y + 1.2, tp.z))) {
           this.attackT = this.ztype !== 'brute' ? 1.15 : rage ? 1.1 : 1.45;
           this.swing = 1;
           w.zombieAttack(this, tgt.id, this.damage);
         }
+        if (this.ztype === 'goonlord') this.goonAbilities(dt, dist, tp);
         this.abilityT -= dt;
-        if (this.abilityT <= 0) {
+        if (this.abilityT <= 0 && this.ztype !== 'goonlord') {
           if (this.ztype === 'brute' && dist < (rage ? 7.5 : 6)) {
             this.abilityT = rage ? DW.randf(3, 4.2) : DW.randf(4.5, 6);
             this.swing = 1;
@@ -242,10 +256,15 @@
       if (tgt) { this.fleeing = false; this.fleeDir = null; }
       const sep = w.separation(this);
       mx += sep[0] * 0.8; mz += sep[1] * 0.8;
-      // bosses shrug off flinching; enraged bosses move 35% faster
-      const spd = this.speed * (1 - this.flinchT * (this.isBoss() ? 0.15 : 0.5)) * (this.enraged ? 1.35 : 1);
-      this.vel.x = mx * spd;
-      this.vel.z = mz * spd;
+      // bosses shrug off flinching; enraged bosses move 35% faster; the Goon Lord lunges
+      const spd = this.speed * (1 - this.flinchT * (this.isBoss() ? 0.15 : 0.5)) * (this.enraged ? 1.35 : 1) * (this.lungeT > 0 ? 3.2 : 1);
+      this.vel.x = mx * spd + (this.knockX || 0);
+      this.vel.z = mz * spd + (this.knockZ || 0);
+      if (this.knockX || this.knockZ) {
+        const decay = Math.exp(-dt * 3.5);
+        this.knockX *= decay; this.knockZ *= decay;
+        if (Math.abs(this.knockX) + Math.abs(this.knockZ) < 0.1) this.knockX = this.knockZ = 0;
+      }
       if (!this.onFloor) this.vel.y -= 18 * dt; else this.vel.y = -0.5;
       const bx = pos.x, bz = pos.z;
       this.onFloor = w.phys.move(pos, this.vel, this.colR, 1.5 * this.s, dt);
@@ -258,6 +277,24 @@
         this.lastPos.copy(pos);
       }
       if (pos.y < -10) w.relocateZombie(this);
+    }
+
+    // Goon Lord: lunges at you from range and screeches to call runners
+    goonAbilities(dt, dist, tp) {
+      const w = this.world, rage = this.enraged;
+      this.lungeT = Math.max(this.lungeT - dt, 0);
+      this.lungeCd -= dt;
+      if (this.lungeCd <= 0 && dist > 5 && dist < 18 && this.lungeT <= 0) {
+        this.lungeT = 0.55;
+        this.lungeCd = rage ? DW.randf(3.5, 5) : DW.randf(6, 8);
+        this.swing = 1;
+        DW.Sfx.play3d('growl_boss', [this.pos.x, this.pos.y + 3, this.pos.z], 6, 0.55, 90);
+      }
+      this.screechT -= dt;
+      if (this.screechT <= 0) {
+        this.screechT = rage ? DW.randf(8, 10) : DW.randf(13, 16);
+        w.goonScreech(this);
+      }
     }
 
     die(headshot) {
@@ -279,8 +316,8 @@
       const k = Math.min(t / 0.5, 1), ease = k * k;
       this.bodyRoot.rotation.x = DW.lerp(d0.rx, Math.PI * 0.47 * (this.deathBack ? 1 : -1), ease);
       this.bodyRoot.position.y = t < 0.5 ? DW.lerp(d0.y, 0.12, k) : t < 3.0 ? 0.12 : DW.lerp(0.12, -1.2, Math.min((t - 3.0) / 1.5, 1));
-      this.rig.knee_l.rotation.x = DW.lerp(d0.knee, 0.8, Math.min(t / 0.4, 1));
-      this.rig.arm_r.rotation.x = DW.lerp(d0.arm, -2.5, k);
+      this.rig.knee_l.rotation.x = DW.lerp(d0.knee, -0.8, Math.min(t / 0.4, 1));
+      this.rig.arm_r.rotation.x = DW.lerp(d0.arm, 2.5, k);
       if (t > 4.5) { this.remove(); return false; }
       return true;
     }
