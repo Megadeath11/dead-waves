@@ -5,7 +5,7 @@
 //   W  wall-buy weapon on a wall      M  mystery box
 //   K  perk machine    S  zombie spawn    P  player spawn
 //   U  Pack-a-Poonch desk          G  grenade wall-buy (on a wall)
-//   A  armour locker   R  ammo resupply   T  sentry turret pad
+//   A  armour locker   R  ammo resupply   T  (old sentry pad, now plain floor: press T in game to place sentries)
 //   H  raised deck (2.4 m, walk on top)   E  elevator up to a deck next to it
 //   > < v ^  stairs rising east / west / south / north (2+ cells, ending at a deck)
 //   k u t r a  a perk / Pack-a-Poonch / turret / ammo / armour standing on a deck
@@ -333,7 +333,7 @@
           buildAmmo(stat, phys, ch === 'r' ? pd : p, info, faceYaw(grid, c, r, w, h, ch === 'r'));
           break;
         case 'T': case 't':
-          buildTurret(scene, phys, ch === 't' ? pd : p, info);
+          // old turret pads: sentries are placed anywhere with T now, so these are just floor
           break;
         case 'E':
           buildLift(scene, stat, phys, p, info);
@@ -470,16 +470,6 @@
     phys.addBox([p[0], p[1] + 0.45, p[2]], sw ? [0.9, 0.9, 1.4] : [1.4, 0.9, 0.9], 'ammo');
     M.label(root, [0, 1.6, 0], `AMMO RESUPPLY  ${DW.AMMO_COST}`, 34, [1.0, 0.85, 0.4]);
     info.ammos.push({ pos: p });
-  }
-
-  // Sentry turret: lives in the scene (its head turns), not in the merged scenery.
-  function buildTurret(scene, phys, p, info) {
-    const root = M.node(scene, p, 0);
-    const head = M.turret(root);
-    M.bake(root);
-    phys.addBox([p[0], p[1] + 0.6, p[2]], [0.7, 1.2, 0.7], 'turret');
-    const label = M.label(root, [0, 1.9, 0], `SENTRY TURRET  ${DW.TURRET_COST}`, 34, [1.0, 0.5, 0.4]);
-    info.turrets.push({ pos: p, root, head, label, t: 0, owner: null, fireT: 0, yaw: 0, labelKey: '' });
   }
 
   // Elevator: a platform that rides between the ground and the deck next to it.

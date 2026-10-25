@@ -68,6 +68,10 @@
       this.skipVotes = new Set();
       this.skipCount = [0, 1];
       this.mySkip = false;
+      this.sentries = [];
+      this.sentrySeq = 1;
+      this.myPing = 0;
+      this.pingT = 0;
       this.waveTotal = 0;
       this.remainingNet = 0;
       this.reviveIn = null; // {by, p, t} someone reviving us
@@ -241,7 +245,8 @@
       this.updateGrenades(dt);
       this.updateWinds(dt);
       this.updateLifts(dt);
-      this.updateTurrets(dt);
+      this.updateSentries(dt);
+      this.updatePing(dt);
       this.updateFx(dt);
       if (DW.Input.justPressed('skip')) this.voteSkip();
       if (this.online) {
@@ -422,26 +427,65 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
     }
 
-    startTurret(i, owner) {
-      const tu = this.info.turrets[i];
-      if (!tu) return;
-      tu.t = DW.TURRET_TIME;
-      tu.owner = owner;
-      Sfx.play3d('reload', tu.pos, 4, 0.7);
-      if (owner === Net.myId) this.hud.centerMsg('SENTRY ONLINE', [1.0, 0.5, 0.4], 1.5);
+    // ---------------------------------------------------------------- sentries (T to place)
+    mySentries() { return this.sentries.filter(s => s.owner === Net.myId).length; }
+
+    // Place a sentry just in front of you: SENTRY_COST each, up to SENTRY_MAX of yours at once.
+    placeSentry() {
+      const p = this.player;
+      if (!p.alive() || this.gameOver) return;
+      if (this.mySentries() >= DW.SENTRY_MAX) {
+        this.hud.centerMsg(`You already have ${DW.SENTRY_MAX} sentries out`, [1.0, 0.5, 0.4], 1.5);
+        DW.Sfx.play('deny');
+        return;
+      }
+      if (!p.onFloor) return;
+      const f = p.forward(new THREE.Vector3());
+      const fl = Math.hypot(f.x, f.z) || 1;
+      const pos = [p.pos.x + f.x / fl * 1.2, p.pos.y, p.pos.z + f.z / fl * 1.2];
+      // needs open floor at the same height: no wall in the way, no drop
+      const eye = new THREE.Vector3(p.pos.x, p.pos.y + 0.6, p.pos.z);
+      const spot = new THREE.Vector3(pos[0], pos[1] + 0.6, pos[2]);
+      if (!this.hasLine(eye, spot) || Math.abs(this.nav.heightAt(pos[0], pos[2]) - p.pos.y) > 0.4) {
+        this.hud.centerMsg("Can't place a sentry there", [1.0, 0.5, 0.4], 1.2);
+        DW.Sfx.play('deny');
+        return;
+      }
+      if (!p.spend(DW.SENTRY_COST)) return;
+      const id = Net.myId + ':' + (this.sentrySeq++);
+      this.addSentry(id, Net.myId, pos, p.yaw);
+      Net.sendAll('sentry', { i: id, p: pos.map(v => Math.round(v * 100) / 100), y: Math.round(p.yaw * 100) / 100 });
+      this.hud.centerMsg(`SENTRY ONLINE  (${this.mySentries()}/${DW.SENTRY_MAX})`, [1.0, 0.5, 0.4], 1.5);
     }
 
-    // The turret's owner does the damage (hits go through the normal path); everyone sees it fire.
-    updateTurrets(dt) {
-      for (const tu of this.info.turrets) {
-        const key = tu.t > 0 ? `ON ${Math.ceil(tu.t)}s` : 'off';
+    addSentry(id, owner, pos, yaw) {
+      const root = M.node(this.scene, pos, 0);
+      const head = M.turret(root);
+      M.bake(root);
+      head.rotation.y = yaw;
+      const mine = owner === Net.myId;
+      const label = M.label(root, [0, 1.55, 0], ' ', 26, mine ? [0.5, 1.0, 0.5] : [0.6, 0.85, 1.0], { pixel: 0.0022, outline: 6 });
+      this.sentries.push({ id, owner, pos, root, head, label, t: DW.SENTRY_TIME, fireT: 0, yaw, labelKey: '' });
+      Sfx.play3d('reload', pos, 4, 0.7);
+    }
+
+    removeSentry(s) {
+      this.scene.remove(s.root);
+      this.sentries.splice(this.sentries.indexOf(s), 1);
+    }
+
+    // The sentry's owner does the damage (hits go through the normal path); everyone sees it fire.
+    updateSentries(dt) {
+      for (const tu of this.sentries.slice()) {
+        tu.t -= dt;
+        if (tu.t <= 0) { this.removeSentry(tu); continue; }
+        const key = Math.ceil(tu.t) + (tu.owner === Net.myId ? '' : Net.persona(tu.owner));
         if (key !== tu.labelKey) {
           tu.labelKey = key;
-          M.setLabel(tu.label, tu.t > 0 ? `SENTRY  ${Math.ceil(tu.t)}s` : `SENTRY TURRET  ${DW.TURRET_COST}`, tu.t > 0 ? [0.5, 1.0, 0.5] : [1.0, 0.5, 0.4]);
+          const who = tu.owner === Net.myId ? 'SENTRY' : `${Net.persona(tu.owner)}'s SENTRY`;
+          M.setLabel(tu.label, `${who}  ${Math.ceil(tu.t)}s`, tu.owner === Net.myId ? [0.5, 1.0, 0.5] : [0.6, 0.85, 1.0]);
         }
-        if (tu.t <= 0) continue;
-        tu.t -= dt;
-        const from = _a.set(tu.pos[0], tu.pos[1] + 1.3, tu.pos[2]); // just above its own collider
+        const from = _a.set(tu.pos[0], tu.pos[1] + 1.3, tu.pos[2]); // just above the turret
         let best = null, bd = 28;
         for (const z of this.zombies.values()) {
           if (z.dead || z.riseT > 0) continue;
@@ -948,16 +992,6 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           };
         }
       }
-      for (let i = 0; i < this.info.turrets.length; i++) {
-        const tu = this.info.turrets[i];
-        if (Math.hypot(tu.pos[0] - pp.x, tu.pos[1] - pp.y, tu.pos[2] - pp.z) < 2.2) {
-          if (tu.t > 0) return { text: `Sentry turret active: ${Math.ceil(tu.t)}s${tu.owner === Net.myId ? '' : ` (${Net.persona(tu.owner)}'s)`}` };
-          return {
-            text: `Press E to switch on the sentry turret for ${DW.TURRET_TIME}s  [${DW.TURRET_COST}]`, cost: DW.TURRET_COST,
-            action: () => { if (p.spend(DW.TURRET_COST)) { this.startTurret(i, Net.myId); Net.sendAll('turret', { i }); } },
-          };
-        }
-      }
       for (let i = 0; i < this.info.lifts.length; i++) {
         const lf = this.info.lifts[i];
         const onIt = Math.abs(lf.pos[0] - pp.x) < 1.0 && Math.abs(lf.pos[2] - pp.z) < 1.0 && Math.abs(pp.y - lf.y) < 0.5;
@@ -1358,21 +1392,39 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       Net.sendAll('ps', {
         p: arr(p.pos), y: Math.round(p.yaw * 1000) / 1000, x: Math.round(p.pitch * 1000) / 1000, w: p.active().id,
         dn: p.downed, dd: p.dead, f: p.firedFlag > 0.1, bt: Math.round(p.bleedT), pp: p.active().pap | 0,
-        s: p.points, k: p.kills, hs: p.headshots, d: p.downs,
+        s: p.points, k: p.kills, hs: p.headshots, d: p.downs, rv: p.revives, e: p.pointsEarned, bo: p.bosses,
+        pg: this.host ? -1 : Math.round(this.myPing || 0), ns: this.mySentries(),
       }, reliable);
+    }
+
+    // clients ping the host once a second; the round trip shows on the Tab board
+    updatePing(dt) {
+      if (!this.online || this.host) return;
+      this.pingT -= dt;
+      if (this.pingT > 0) return;
+      this.pingT = 1;
+      Net.sendHost('ping', { t: Math.round(performance.now()) }, false);
     }
 
     teamRows(includeMe) {
       const rows = [];
       const p = this.player;
-      if (includeMe) rows.push({ name: Net.myName, points: p.points, kills: p.kills, hs: p.headshots, downs: p.downs, down: p.downed, dead: p.dead, me: true });
-      for (const r of this.remotes.values())
-        rows.push({ name: r.name, points: r.points, kills: r.kills, hs: r.hs, downs: r.downs, down: r.down, dead: r.dead, me: false });
+      if (includeMe) rows.push({
+        name: Net.myName, points: p.points, earned: p.pointsEarned, kills: p.kills, hs: p.headshots, downs: p.downs, revives: p.revives,
+        bosses: p.bosses, sentries: this.mySentries(), ping: this.host ? -1 : Math.round(this.myPing || 0), down: p.downed, dead: p.dead, me: true,
+      });
+      for (const [id, r] of this.remotes)
+        rows.push({
+          name: r.name, points: r.points, earned: r.earned || 0, kills: r.kills, hs: r.hs, downs: r.downs, revives: r.revives || 0,
+          bosses: r.bosses || 0, sentries: r.sentries || 0, ping: id === Net.hostId ? -1 : (r.ping === undefined ? null : r.ping),
+          down: r.down, dead: r.dead, me: false,
+        });
       rows.sort((a, b) => b.points - a.points);
       return rows;
     }
 
     playerLeft(id) {
+      for (const s of this.sentries.slice()) if (s.owner === id) this.removeSentry(s);
       const r = this.remotes.get(id);
       if (!r) return;
       this.scene.remove(r.node);
@@ -1437,6 +1489,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           if (wasDown && !r.down) r.graceT = 3.0;
           r.dead = !!d.dd;
           r.points = d.s | 0; r.kills = d.k | 0; r.hs = d.hs | 0; r.downs = d.d | 0;
+          r.revives = d.rv | 0; r.earned = d.e | 0; r.bosses = d.bo | 0; r.sentries = d.ns | 0;
+          if (d.pg !== undefined) r.ping = +d.pg;
           r.stale = 0;
           r.name = Net.persona(sender);
           if (r.down && !wasDown) {
@@ -1459,7 +1513,15 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           }
           break;
         case 'lift': this.setLift(d.i | 0, +d.t || 0); break;
-        case 'turret': this.startTurret(d.i | 0, sender); break;
+        case 'sentry':
+          if (Array.isArray(d.p) && !this.sentries.some(s => s.id === d.i)) this.addSentry(String(d.i), sender, d.p, +d.y || 0);
+          break;
+        case 'ping': if (this.host) Net.sendTo(sender, 'pong', { t: d.t }, false); break;
+        case 'pong': {
+          const rtt = performance.now() - (+d.t || 0);
+          if (rtt >= 0 && rtt < 5000) this.myPing = this.myPing ? this.myPing * 0.7 + rtt * 0.3 : rtt;
+          break;
+        }
         case 'skip': if (this.host) this.addSkipVote(sender); break;
         case 'skipv':
           this.skipCount = [d.n | 0, d.of | 0];

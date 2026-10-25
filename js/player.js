@@ -218,6 +218,7 @@
       if (I.justPressed('weapon_1')) this.switchTo(0);
       if (I.justPressed('weapon_2')) this.switchTo(1);
       if (I.justPressed('weapon_4')) this.switchTo(2);
+      if (I.justPressed('sentry')) w.placeSentry();
       if (I.justPressed('weapon_3')) this.toggleWind();
       if (I.justPressed('swap')) this.cycleWeapon();
       if (I.justPressed('melee')) this.melee();

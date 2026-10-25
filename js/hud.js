@@ -101,7 +101,7 @@
       this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
       this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(wd.mag / 4) ? RED : BONE);
-      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades}    [G]      Wind: ${p.wind.mag}/${DW.WIND_CHARGES}    [3]`);
+      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades} [G]    Wind: ${p.wind.mag}/${DW.WIND_CHARGES} [3]    Sentries: ${w.mySentries()}/${DW.SENTRY_MAX} [T] ${DW.SENTRY_COST}`);
       const lowMag = a.mag <= Math.max(1, Math.floor(wd.mag / 4));
       let hint = '';
       if (p.dead || p.reloading || a.id === 'wind') hint = '';
@@ -113,7 +113,7 @@
 
       // dot crosshair (hidden behind the sniper scope)
       const showDot = !p.dead && !this.scopeOn && !w.gameOver;
-      this.dot.style.display = showDot ? '' : 'none';
+      this.dot.style.display = showDot ? 'block' : 'none';
       this.dot.classList.toggle('on-target', !!p.aimOnZombie);
 
       const pk = p.perks.join(',');
@@ -172,7 +172,7 @@
       });
 
       const showScore = DW.Input.action('scoreboard') && !w.gameOver;
-      this.scorePanel.style.display = showScore ? '' : 'none';
+      this.scorePanel.style.display = showScore ? 'block' : 'none';
       if (showScore) this.fillScoreboard(this.scoreTable);
       this.clickHint.style.display = !DW.Input.locked && !this.pausePanel && !w.gameOver && !DW.botActive ? 'block' : 'none';
     }
@@ -268,11 +268,31 @@
       }
     }
 
+    // Tab board: everyone in the match with their stats and ping to the host
     fillScoreboard(table) {
-      const rows = this.world.teamRows(true);
-      let html = '<tr class="head"><td>Player</td><td>Points</td><td>Kills</td><td>Headshots</td><td>Downs</td></tr>';
-      for (const r of rows)
-        html += `<tr${r.me ? ' class="me"' : ''}><td>${UI.esc(r.name)}</td><td>${r.points}</td><td>${r.kills}</td><td>${r.hs}</td><td>${r.downs}</td></tr>`;
+      const w = this.world;
+      const rows = w.teamRows(true);
+      if (table === this.scoreTable) {
+        const title = this.scorePanel.querySelector('.title');
+        const t = `PLAYERS ONLINE  ${rows.length}/4`;
+        if (title.textContent !== t) title.textContent = t;
+        const sub = `${w.mapName()}  -  ${DW.diff().name}  -  Wave ${w.wave}  -  ${DW.fmtTime(w.elapsed)}`;
+        if (!this.scoreSub) { this.scoreSub = UI.el('div', 'dim sub'); title.after(this.scoreSub); }
+        if (this.scoreSub.textContent !== sub) this.scoreSub.textContent = sub;
+      }
+      const ping = r => {
+        if (r.ping === -1) return '<span class="host">HOST</span>';
+        if (r.ping === null || r.ping === undefined || !w.online) return '<span class="dim">-</span>';
+        const cls = r.ping < 80 ? 'good' : r.ping < 150 ? 'ok' : 'bad';
+        return `<span class="${cls}">${r.ping} ms</span>`;
+      };
+      let html = '<tr class="head"><td>Player</td><td>Money</td><td>Earned</td><td>Kills</td><td>Headshots</td><td>Revives</td><td>Downs</td><td>Bosses</td><td>Sentries</td><td>Ping</td></tr>';
+      for (const r of rows) {
+        const hsPct = r.kills > 0 ? Math.round(r.hs / r.kills * 100) : 0;
+        const st = r.dead ? ' <span class="bad">DEAD</span>' : r.down ? ' <span class="bad">DOWN</span>' : '';
+        html += `<tr${r.me ? ' class="me"' : ''}><td>${UI.esc(r.name)}${st}</td><td class="money">${r.points}</td><td>${r.earned}</td><td>${r.kills}</td>` +
+          `<td>${r.hs} <span class="dim">(${hsPct}%)</span></td><td>${r.revives}</td><td>${r.downs}</td><td>${r.bosses}</td><td>${r.sentries}/${DW.SENTRY_MAX}</td><td>${ping(r)}</td></tr>`;
+      }
       table.innerHTML = html;
     }
 
@@ -281,7 +301,7 @@
     setInteract(text, progress, affordable = true) {
       this.set(this.interactL, 'it', text);
       this.interactL.style.color = UI.rgb(affordable ? BONE : [1.0, 0.45, 0.4]);
-      this.interactBar.style.display = progress > 0 ? '' : 'none';
+      this.interactBar.style.display = progress > 0 ? 'block' : 'none';
       this.interactFill.style.width = (progress * 100).toFixed(1) + '%';
     }
     centerMsg(text, color = RED, dur = 2.5) {
@@ -306,7 +326,7 @@
     }
     scopeVisible(on) {
       this.scopeOn = on;
-      this.scope.style.display = on ? '' : 'none';
+      this.scope.style.display = on ? 'block' : 'none';
     }
 
     // ---------------------------------------------------------------- pause

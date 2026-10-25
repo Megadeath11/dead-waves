@@ -18,7 +18,7 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 ## What's in it
 
 - **5 maps**: Outpost, Bunker, Factory, and the multi-level Harbor (container decks, crane platform, elevators) and Overpass (raised highway bridge, stair ramps, elevators). Buyable doors open new zones; zombies climb stairs after you.
-- **Late-game spending**: Pack-a-Poonch tiers I-III (20k / 40k / 60k for 4x / 6x / 9x damage), 7 perks (Mule Kick, Deadshot, Stamin-Up added), armour lockers, ammo resupply crates and sentry turrets.
+- **Late-game spending**: Pack-a-Poonch tiers I-III (20k / 40k / 60k for 4x / 6x / 9x damage), 7 perks (Mule Kick, Deadshot, Stamin-Up added), armour lockers, ammo resupply crates, and sentry turrets you place anywhere with T (8,000 each, up to 4 per player, 2 minutes each).
 - **Jump crits**: headshots while you're in the air do double damage.
 - **30 s break between rounds**; everyone presses Enter to skip it.
 - **10 guns** with no spread: every bullet goes exactly where the dot is, standing, running or aiming. Wall-buys (M9, M14, Pump Shotgun, MP5, AK-47) and the **Mystery Box** (LMG, Desert Hawk, Barrett .50, Plasma Caster, Death Machine).
@@ -44,7 +44,8 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 | Grenade | G |
 | Wind charge (knock zombies back, shoot at your feet to launch yourself) | 3 |
 | Buy / open door / revive (hold) | E or F |
-| Scoreboard | Tab |
+| Place a sentry turret (8,000) | T |
+| Players online: stats and ping | Tab |
 | Menu / settings | Esc |
 | Fullscreen | F11 |
 

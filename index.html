@@ -159,8 +159,16 @@
     white-space: pre-line; -webkit-text-stroke: 12px rgba(0,0,0,.9); opacity: 0; }
   .down { position: absolute; left: 50%; top: 50%; width: 1000px; margin: 130px 0 0 -500px; text-align: center; font-size: 30px; color: rgb(255, 102, 89);
     white-space: pre-line; -webkit-text-stroke: 4px rgba(0,0,0,.9); }
-  .scoreboard { position: absolute; left: 50%; top: 50%; width: 720px; margin: -200px 0 0 -360px; display: none; }
-  .scoreboard .title, .scoreboard .title { font-size: 28px; color: var(--red); margin-bottom: 12px; }
+  .scoreboard { position: absolute; left: 50%; top: 50%; width: 1100px; margin: -230px 0 0 -550px; display: none; }
+  .scoreboard .title { font-size: 30px; font-weight: 800; color: var(--red); letter-spacing: 2px; }
+  .scoreboard .sub { font-size: 18px; margin: 2px 0 14px; }
+  .scoreboard table { width: 100%; }
+  .scoreboard td { padding: 6px 18px 6px 0 !important; font-size: 21px; }
+  .scoreboard tr.head td { font-size: 15px !important; letter-spacing: 1px; text-transform: uppercase; }
+  .scoreboard tr:not(.head) { border-top: 1px solid rgba(255,255,255,.08); }
+  .hud .money { color: var(--gold); }
+  .hud .good { color: rgb(110, 230, 110); } .hud .ok { color: rgb(240, 200, 70); } .hud .bad { color: rgb(255, 90, 70); }
+  .hud .host { color: rgb(150, 190, 255); font-weight: 700; }
   .scoreboard table, .hud table { border-collapse: collapse; font-size: 22px; }
   .hud table td { padding: 3px 34px 3px 0; -webkit-text-stroke: 0; }
   .hud table tr.head td { color: var(--dim); font-size: 18px; }

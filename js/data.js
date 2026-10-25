@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.4';
+DW.VERSION = '2.5';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -57,8 +57,9 @@ DW.PAP_COST = DW.PAP_COSTS[1];
 DW.ARMOR_COST = 4000;     // armour locker: soaks this much damage before health
 DW.ARMOR_MAX = 150;
 DW.AMMO_COST = 5000;      // ammo resupply: refills every gun you carry
-DW.TURRET_COST = 8000;    // sentry turret pad: guards the spot for TURRET_TIME seconds
-DW.TURRET_TIME = 60;
+DW.SENTRY_COST = 8000;    // press T to place a sentry turret anywhere
+DW.SENTRY_MAX = 4;        // per player, at once
+DW.SENTRY_TIME = 120;     // seconds each one lasts
 DW.INTERMISSION = 30;     // seconds between rounds (everyone can vote to skip with Enter)
 DW.CRIT_MULT = 2;         // headshots while airborne
 DW.GRENADE_COST = 150;    // per grenade at the grenade wall-buy
