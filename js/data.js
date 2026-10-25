@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.6.0';
+DW.VERSION = '2.6.1';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -79,7 +79,8 @@ DW.PERKS = {
 };
 DW.PERK_ORDER = ['iron', 'fast', 'tap', 'wind', 'mule', 'dead', 'stam'];
 DW.MAX_PERKS = 7;
-DW.ZTYPES = ['walker', 'runner', 'brute', 'spitter', 'goonlord'];
+DW.ZTYPES = ['walker', 'runner', 'brute', 'spitter', 'goonlord', 'dodger']; // index travels in snapshots: append only
+DW.DODGER_WAVE = 6;   // Dodgers (sidestep when someone aims at them) start showing up on this wave
 DW.GOON_WAVE = 20;   // the Goon Lord rises on this wave, then every 10 waves
 DW.GOON_STARE = 2.2; // after rising it stands still staring at you, then shrieks and charges
 DW.BOSS_NAMES = { brute: 'BRUTE', spitter: 'ABOMINATION', goonlord: 'GOON LORD - THE WENDYGOON' };

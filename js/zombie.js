@@ -4,7 +4,7 @@
 (function () {
   const M = DW.Models;
   const RISE_TIME = 1.3;
-  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35, goonlord: 1.75 }; // the Goon Lord's own skeleton is ~2.1 tall, so ~3.7 m: twice a player
+  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35, goonlord: 1.75, dodger: 0.95 }; // the Goon Lord's own skeleton is ~2.1 tall, so ~3.7 m: twice a player
   const _p = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
   class Zombie {
@@ -50,6 +50,10 @@
       this.stareT = type === 'goonlord' ? DW.GOON_STARE : 0;
       M.bake(this.bodyRoot);
       world.scene.add(this.root);
+      if (type === 'dodger' && !world.seenDodger) {
+        world.seenDodger = true;
+        world.hud.centerMsg('DODGERS\nThey sidestep when you aim at them', [0.3, 0.85, 1.0], 3);
+      }
       this.lastPos = this.pos.clone();
       this.bodyRoot.position.y = -1.9 * this.s;
       world.dirtBurst(this.pos, this.s);
@@ -83,6 +87,38 @@
       return best;
     }
 
+    // Dodger: when someone's aim passes within ~1 m of it (and they can see it), it sidesteps across
+    // the aim line, alternating sides, still drifting toward its target. A short cooldown between
+    // dodges leaves windows to land shots. Returns a move vector (x speed) or null.
+    dodge(dt, dist, mx, mz) {
+      const w = this.world, pos = this.pos;
+      this.dodgeCd = Math.max((this.dodgeCd || 0) - dt, 0);
+      if (this.dodgeT > 0) { this.dodgeT -= dt; return this.dodgeDir; }
+      if (this.dodgeCd > 0 || dist < 2.2 || this.riseT > 0 || this.flinchT > 0.5) return null;
+      const cy = pos.y + 1.2 * this.s;
+      for (const [e, f] of w.aims || []) {
+        const cx = pos.x - e.x, ch = cy - e.y, cz = pos.z - e.z;
+        const along = cx * f.x + ch * f.y + cz * f.z;
+        if (along < 1 || along > 35) continue;
+        if (cx * cx + ch * ch + cz * cz - along * along > 1.1 * 1.1) continue;
+        if (!w.hasLine(_a.copy(e), _b.set(pos.x, cy, pos.z))) continue;
+        const l = Math.hypot(f.x, f.z) || 1;
+        const sx = -f.z / l, sz = f.x / l; // the aimer's right
+        let side = -(this.dodgeSide || (Math.random() < 0.5 ? 1 : -1));
+        for (let k = 0; k < 2; k++, side = -side) {
+          if (!w.nav.lineClear(pos.x, pos.z, pos.x + sx * side * 1.8, pos.z + sz * side * 1.8)) continue;
+          this.dodgeSide = side;
+          this.dodgeDir = [sx * side * 2.6 + mx * 0.4, sz * side * 2.6 + mz * 0.4];
+          this.dodgeT = DW.randf(0.3, 0.42);
+          this.dodgeCd = DW.randf(0.45, 0.8);
+          return this.dodgeDir;
+        }
+        this.dodgeCd = 0.3; // boxed in: try again in a moment
+        return null;
+      }
+      return null;
+    }
+
     flinch(head) { this.flinchT = head ? 1.4 : 1.0; }
 
     // Limbs hang along -Y: a positive x rotation swings an arm forward (-Z, toward the target),
@@ -96,13 +132,21 @@
       if (Math.random() < dt * 0.4) this.twitch = DW.randf(-1, 1);
       const t = this.animT;
       const sw = Math.sin(t) * 0.65 * moving;
+      // Dodgers lean hard into their sidesteps (works on clients too: it reads how the body actually moved)
+      if (this.ztype === 'dodger') {
+        const dx = this.pos.x - (this.lx ?? this.pos.x), dz = this.pos.z - (this.lz ?? this.pos.z);
+        this.lx = this.pos.x; this.lz = this.pos.z;
+        const lat = (dx * Math.cos(this.yaw) - dz * Math.sin(this.yaw)) / Math.max(dt, 1e-3);
+        this.lean = DW.lerp(this.lean || 0, DW.clamp(lat / 6, -1, 1), Math.min(1, dt * 10));
+        this.bodyRoot.rotation.z = -this.lean * 0.3;
+      }
       rig.leg_l.rotation.x = sw;
       rig.leg_r.rotation.x = -sw;
       rig.knee_l.rotation.x = -(Math.max(0, -Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
       rig.knee_r.rotation.x = -(Math.max(0, Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
       rig.hips.position.y = (rig.hipY || 0.95) - Math.abs(Math.sin(t)) * 0.04 * moving;
       const spine = rig.spine, swing = this.swing;
-      if (this.ztype === 'runner') {
+      if (this.ztype === 'runner' || this.ztype === 'dodger') {
         spine.rotation.x = -0.35 * Math.max(moving, 0.3);
         rig.arm_l.rotation.x = -(Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.4);
         rig.arm_r.rotation.x = -(-Math.sin(t) * 1.1 * moving - 0.3 - swing * 1.6);
@@ -226,6 +270,10 @@
         } else if (this.ztype === 'spitter' && dist < 7 && this.hasLos) {
           const l = Math.hypot(pos.x - tp.x, pos.z - tp.z) || 1;
           mx = (pos.x - tp.x) / l * 0.6; mz = (pos.z - tp.z) / l * 0.6;
+        }
+        if (this.ztype === 'dodger') {
+          const d = this.dodge(dt, dist, mx, mz);
+          if (d) { mx = d[0]; mz = d[1]; }
         }
         let fx = mx, fz = mz;
         if (dist < 5 || (mx === 0 && mz === 0)) { fx = tp.x - pos.x; fz = tp.z - pos.z; }

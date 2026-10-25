@@ -25,6 +25,7 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **4 perks**: Iron Hide, Fast Hands, Double Tap, Second Wind. **Power-ups**: Max Ammo, Double Points, Insta-Kill, Nuke.
 - **Pack-a-Poonch** desk (20,000): gem finish and 4x damage. **Grenade wall-buy** fills you up to 10. **Wind charge** on key 3.
 - **The Goon Lord** (the Wendygoon) rises on wave 20 and puts the lights out.
+- **Dodgers** (from wave 6): hooded zombies with cyan eyes that sidestep whenever someone aims at them. Lead your shots and fire between dodges.
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).

@@ -395,6 +395,7 @@
     const opt = { skin: rng.pick(skins), shirt: rng.pick(shirts), pants: rng.pick(pantsC), eye: [1.0, 0.3, 0.1], build: 'normal', sleeves: rng.randf() < 0.5 };
     if (type === 'runner') Object.assign(opt, { build: 'lean', eye: [1.0, 0.85, 0.15], sleeves: false });
     else if (type === 'brute') Object.assign(opt, { build: 'brute', skin: [0.42, 0.3, 0.28], shirt: [0.22, 0.09, 0.07], pants: [0.12, 0.1, 0.09], eye: [1.0, 0.08, 0.04], sleeves: false });
+    else if (type === 'dodger') Object.assign(opt, { build: 'lean', skin: [0.62, 0.63, 0.58], shirt: [0.1, 0.12, 0.15], pants: [0.09, 0.09, 0.11], eye: [0.25, 0.9, 1.0], sleeves: true });
     else if (type === 'spitter') Object.assign(opt, { build: 'bloated', skin: [0.36, 0.46, 0.22], shirt: [0.26, 0.3, 0.14], belly: [0.5, 0.62, 0.22], eye: [0.55, 1.0, 0.2], sleeves: false });
     const r = M.humanoid(parent, opt);
     const blood = M.mat([0.35, 0.03, 0.02], 0, 0, 0.4);
@@ -409,7 +410,14 @@
       M.box(spine, [0, 0.4, -0.13], [0.24, 0.24, 0.005], M.mat([0.3, 0.05, 0.04]));
     }
     const hairRoll = rng.randf();
-    if (hairRoll < 0.45) M.box(head, [0, 0.29, 0.02], [0.27, 0.06, 0.24], M.mat(rng.pick([[0.12, 0.1, 0.08], [0.3, 0.22, 0.12], [0.5, 0.48, 0.45]])));
+    if (type === 'dodger') {
+      // dark hood framing the face
+      const hood = M.mat(opt.shirt);
+      M.box(head, [0, 0.29, 0.03], [0.32, 0.07, 0.31], hood);
+      M.box(head, [0, 0.13, 0.16], [0.32, 0.36, 0.05], hood);
+      for (const x of [-0.155, 0.155]) M.box(head, [x, 0.14, 0.02], [0.03, 0.34, 0.3], hood);
+      M.box(spine, [0, 0.52, 0.16], [0.3, 0.14, 0.06], hood);
+    } else if (hairRoll < 0.45) M.box(head, [0, 0.29, 0.02], [0.27, 0.06, 0.24], M.mat(rng.pick([[0.12, 0.1, 0.08], [0.3, 0.22, 0.12], [0.5, 0.48, 0.45]])));
     else if (hairRoll < 0.6 && type === 'walker') {
       const cap = M.mat(rng.pick([[0.2, 0.25, 0.4], [0.4, 0.15, 0.1], [0.25, 0.3, 0.2]]));
       M.box(head, [0, 0.3, 0.01], [0.28, 0.07, 0.28], cap);

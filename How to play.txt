@@ -17,6 +17,7 @@ Controls (defaults - change any key under Settings > Key bindings)
   E buy / open doors / ride elevators / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
   T place a sentry turret (8,000, up to 4 each), Tab players online with stats and ping
   Jumping headshots are crits (double damage).
+  Dodgers (hooded, cyan eyes, from wave 6) sidestep when you aim at them: shoot between dodges.
 
 Settings: graphics presets (Low to Ultra) plus render resolution, shadows, FPS limit
 and an FPS counter; separate music / effects volume; aim sensitivity, invert Y,

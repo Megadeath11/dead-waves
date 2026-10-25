@@ -308,7 +308,20 @@
       if (targets.length) this.nav.compute(targets);
     }
 
+    // every living player's aim (eye + direction), so Dodgers know when they're in someone's sights
+    buildAims() {
+      const out = [], p = this.player;
+      if (!p.downed && !p.dead) out.push([p.eye(new THREE.Vector3()), p.forward(new THREE.Vector3())]);
+      for (const r of this.remotes.values()) {
+        if (r.down || r.dead || r.stale > 5) continue;
+        const cp = Math.cos(r.pitch);
+        out.push([new THREE.Vector3(r.pos[0], r.pos[1] + 1.6, r.pos[2]), new THREE.Vector3(-Math.sin(r.yaw) * cp, Math.sin(r.pitch), -Math.cos(r.yaw) * cp)]);
+      }
+      return out;
+    }
+
     hostTick(dt) {
+      this.aims = this.buildAims();
       this.navT -= dt;
       if (this.navT <= 0) { this.navT = 0.25; this.computeNav(); }
       if (this.state === 'intermission') {
@@ -325,7 +338,8 @@
           } else {
             this.toSpawn -= 1;
             const runnerChance = DW.clamp((this.wave - 3) * 0.12, 0, 0.8);
-            this.spawnZombie(Math.random() < runnerChance ? 'runner' : 'walker', this.pickSpawn());
+            const dodgerChance = DW.clamp((this.wave - DW.DODGER_WAVE + 1) * 0.03, 0, 0.2);
+            this.spawnZombie(Math.random() < dodgerChance ? 'dodger' : Math.random() < runnerChance ? 'runner' : 'walker', this.pickSpawn());
           }
         }
         if (this.toSpawn <= 0 && !this.bossQueue.length && this.zombies.size === 0) {
@@ -573,6 +587,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       let hp = World.zombieHp(this.wave) * this.diff.hp;
       let spd = DW.randf(1.4, 2.1), dmg = 40;
       if (type === 'runner') spd = DW.randf(4.0, 4.9);
+      else if (type === 'dodger') { spd = DW.randf(2.6, 3.1); hp *= 0.85; dmg = 35; }
       else if (type === 'brute') { hp = Math.max(6000, hp * 16) * (1 + 0.6 * (n - 1)); spd = 3.1; dmg = 65; }
       else if (type === 'spitter') { hp = Math.max(5000, hp * 13) * (1 + 0.6 * (n - 1)); spd = 2.7; dmg = 42; }
       else if (type === 'goonlord') { hp = Math.max(45000, hp * 45) * (1 + 0.7 * (n - 1)); spd = 4.4; dmg = 95; } // it runs
@@ -1553,7 +1568,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         let z = this.zombies.get(id);
         if (!z) {
           const type = DW.ZTYPES[DW.clamp(Math.round(a[i + 1]), 0, DW.ZTYPES.length - 1)];
-          z = new DW.Zombie(this, id, type, 100, type !== 'runner' ? 2.0 : 4.5, 0, true, [a[i + 2], a[i + 3], a[i + 4]]);
+          z = new DW.Zombie(this, id, type, 100, { runner: 4.5, dodger: 2.8 }[type] || 2.0, 0, true, [a[i + 2], a[i + 3], a[i + 4]]);
           this.zombies.set(id, z);
         }
         z.targetPos.set(a[i + 2], a[i + 3], a[i + 4]);
