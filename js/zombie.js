@@ -59,20 +59,25 @@
     isBoss() { return this.ztype === 'brute' || this.ztype === 'spitter' || this.ztype === 'goonlord'; }
 
     // Ray test against body capsule and head sphere. Returns {t, head} or null.
+    // Hit boxes follow the animated skeleton (so a hunched, swaying or side-on zombie is hit where it
+    // is drawn): a sphere on the head, a capsule from hips to neck, and one from the feet to the hips.
     hitTest(ro, rd, maxT) {
       if (this.dead) return null;
-      const s = this.s, p = this.pos;
-      const r = 0.32 * s * (this.ztype === 'brute' ? 1.2 : 1);
-      const half = Math.max(0.75 * s - r, 0.01);
-      _a.set(p.x, p.y + 0.78 * s - half, p.z);
-      _b.set(p.x, p.y + 0.78 * s + half, p.z);
-      const tb = DW.rayCapsule(ro, rd, _a, _b, r);
-      const fwd = this.ztype === 'runner' ? 0.2 * s : 0.01 * s;
-      const hy = this.ztype === 'runner' ? 1.7 * s : 1.78 * s;
-      _p.set(p.x - Math.sin(this.yaw) * fwd, p.y + hy, p.z - Math.cos(this.yaw) * fwd);
-      const th = DW.raySphere(ro, rd, _p, 0.19 * s);
+      const s = this.s, p = this.pos, rig = this.rig;
+      this.root.updateMatrixWorld(true);
+      const torsoR = s * ({ brute: 0.3, spitter: 0.27, goonlord: 0.2 }[this.ztype] || 0.21);
+      rig.hips.getWorldPosition(_a);
+      // capsule top sits one radius below the neck so its rounded end doesn't cover the head
+      _b.set(0, Math.max(0.6 - torsoR / s, 0.2), 0);
+      rig.spine.localToWorld(_b);
+      const tt = DW.rayCapsule(ro, rd, _a, _b, torsoR);
+      _p.set(p.x, p.y + 0.12 * s, p.z);
+      const tl = DW.rayCapsule(ro, rd, _p, _a, 0.17 * s);
+      _p.set(0, 0.13, 0);
+      rig.head.localToWorld(_p);
+      const th = DW.raySphere(ro, rd, _p, 0.2 * s);
       let best = null;
-      if (tb >= 0 && tb <= maxT) best = { t: tb, head: false };
+      for (const t of [tt, tl]) if (t >= 0 && t <= maxT && (!best || t < best.t)) best = { t, head: false };
       if (th >= 0 && th <= maxT && (!best || th <= best.t + 0.05)) best = { t: th, head: true };
       return best;
     }
