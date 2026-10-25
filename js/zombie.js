@@ -4,7 +4,7 @@
 (function () {
   const M = DW.Models;
   const RISE_TIME = 1.3;
-  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35, goonlord: 2.2 };
+  const SCALE = { walker: 1.0, runner: 0.97, brute: 1.7, spitter: 1.35, goonlord: 1.75 }; // the Goon Lord's own skeleton is ~2.1 tall, so ~3.7 m: twice a player
   const _p = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
   class Zombie {
@@ -68,12 +68,12 @@
       const torsoR = s * ({ brute: 0.3, spitter: 0.27, goonlord: 0.2 }[this.ztype] || 0.21);
       rig.hips.getWorldPosition(_a);
       // capsule top sits one radius below the neck so its rounded end doesn't cover the head
-      _b.set(0, Math.max(0.6 - torsoR / s, 0.2), 0);
+      _b.set(0, Math.max((rig.neckY || 0.6) - torsoR / s, 0.2), 0);
       rig.spine.localToWorld(_b);
       const tt = DW.rayCapsule(ro, rd, _a, _b, torsoR);
       _p.set(p.x, p.y + 0.12 * s, p.z);
       const tl = DW.rayCapsule(ro, rd, _p, _a, 0.17 * s);
-      _p.set(0, 0.13, 0);
+      if (rig.headC) _p.fromArray(rig.headC); else _p.set(0, 0.13, 0);
       rig.head.localToWorld(_p);
       const th = DW.raySphere(ro, rd, _p, 0.2 * s);
       let best = null;
@@ -99,7 +99,7 @@
       rig.leg_r.rotation.x = -sw;
       rig.knee_l.rotation.x = -(Math.max(0, -Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
       rig.knee_r.rotation.x = -(Math.max(0, Math.sin(t - 0.6)) * 0.9 * moving + 0.05);
-      rig.hips.position.y = 0.95 - Math.abs(Math.sin(t)) * 0.04 * moving;
+      rig.hips.position.y = (rig.hipY || 0.95) - Math.abs(Math.sin(t)) * 0.04 * moving;
       const spine = rig.spine, swing = this.swing;
       if (this.ztype === 'runner') {
         spine.rotation.x = -0.35 * Math.max(moving, 0.3);
@@ -116,15 +116,15 @@
         rig.elbow_l.rotation.x = -(-0.5 + swing * 0.4);
         rig.elbow_r.rotation.x = -(-0.5 + swing * 0.4);
       } else if (this.ztype === 'goonlord') {
-        // hunched, arms hanging long and low; during a lunge the claws go out in front
+        // stooped, with its long arms hanging down past the knees; claws come up to swing and lunge
         const lunge = this.lungeT > 0 ? 1 : 0;
-        spine.rotation.x = -0.45 + Math.sin(t * 0.5) * 0.05;
-        rig.arm_l.rotation.x = 0.35 + Math.sin(t) * 0.25 * moving + swing * 1.6 + lunge * 1.0;
-        rig.arm_r.rotation.x = 0.35 - Math.sin(t) * 0.25 * moving + swing * 1.9 + lunge * 1.0;
-        rig.arm_l.rotation.z = -0.12;
-        rig.arm_r.rotation.z = 0.12;
-        rig.elbow_l.rotation.x = 0.3 + swing * 0.5;
-        rig.elbow_r.rotation.x = 0.3 + swing * 0.5;
+        spine.rotation.x = -0.22 - moving * 0.18 + Math.sin(t * 0.5) * 0.04;
+        rig.arm_l.rotation.x = 0.12 + Math.sin(t) * 0.45 * moving + swing * 1.7 + lunge * 1.2;
+        rig.arm_r.rotation.x = 0.12 - Math.sin(t) * 0.45 * moving + swing * 2.0 + lunge * 1.2;
+        rig.arm_l.rotation.z = -0.08;
+        rig.arm_r.rotation.z = 0.08;
+        rig.elbow_l.rotation.x = 0.15 + swing * 0.6 + lunge * 0.3;
+        rig.elbow_r.rotation.x = 0.15 + swing * 0.6 + lunge * 0.3;
       } else {
         const reach = -1.3 + Math.sin(t * 0.5) * 0.12;
         rig.arm_l.rotation.x = -(reach + swing * 1.5 + Math.sin(t * 0.7) * 0.08);
@@ -138,6 +138,18 @@
       rig.head.rotation.z = this.twitch * 0.25 + Math.sin(t * 0.5 + 1) * 0.06;
       rig.head.rotation.x = this.flinchT * 0.4 + (this.ztype === 'spitter' ? 0.15 : 0);
       rig.jaw.rotation.x = 0.15 + Math.abs(Math.sin(t * 0.37)) * 0.25 + swing * 0.35;
+      if (this.ztype === 'goonlord') {
+        // it shakes violently while it runs: a fresh random jolt every frame, harder when lunging
+        const shake = moving * 0.055 + (this.lungeT > 0 ? 0.06 : 0) + (this.enraged ? 0.015 : 0);
+        const j = () => (Math.random() * 2 - 1) * shake;
+        rig.hips.position.x = j();
+        rig.hips.position.z = j();
+        rig.hips.position.y += j() * 0.5;
+        spine.rotation.z += j() * 3;
+        spine.rotation.x += j() * 2;
+        rig.head.rotation.z += j() * 6;
+        rig.head.rotation.y = j() * 5;
+      }
     }
 
     update(dt) {
@@ -262,7 +274,7 @@
       const sep = w.separation(this);
       mx += sep[0] * 0.8; mz += sep[1] * 0.8;
       // bosses shrug off flinching; enraged bosses move 35% faster; the Goon Lord lunges
-      const spd = this.speed * (1 - this.flinchT * (this.isBoss() ? 0.15 : 0.5)) * (this.enraged ? 1.35 : 1) * (this.lungeT > 0 ? 3.2 : 1);
+      const spd = this.speed * (1 - this.flinchT * (this.isBoss() ? 0.15 : 0.5)) * (this.enraged ? 1.35 : 1) * (this.lungeT > 0 ? 2.4 : 1);
       this.vel.x = mx * spd + (this.knockX || 0);
       this.vel.z = mz * spd + (this.knockZ || 0);
       if (this.knockX || this.knockZ) {

@@ -448,42 +448,93 @@
     return r;
   };
 
-  // The Goon Lord, the Wendygoon: a gaunt, pale, antlered thing with a skull face and long claws.
+  // The Goon Lord, the Wendygoon: a towering, lanky, dark-furred thing with a deer skull head, big grey
+  // antlers, white glowing eyes, a mouth of jagged teeth, bare ribs, bone spikes down its back and arms
+  // that hang past its knees ending in long white claws. Own skeleton (longer limbs than the humanoid)
+  // with the same joint names, so the shared animation and hit boxes work. ~2.1 units tall before scale.
   M.wendygoon = (parent, rng) => {
-    const r = M.humanoid(parent, { build: 'lean', skin: [0.72, 0.7, 0.64], shirt: [0.16, 0.13, 0.11], pants: [0.12, 0.1, 0.09],
-      shoe: [0.08, 0.07, 0.06], eye: [0.75, 1.0, 1.0], sleeves: false, hand: [0.2, 0.18, 0.16] });
-    const bone = M.mat([0.86, 0.82, 0.7]);
-    const fur = M.mat([0.14, 0.11, 0.09], 0, 0, 1);
-    const dark = M.mat([0.05, 0.04, 0.04]);
-    const spine = r.spine, head = r.head;
-    // ribcage on a sunken chest
-    for (let k = 0; k < 5; k++) M.box(spine, [0, 0.2 + k * 0.065, -0.12], [0.3 - k * 0.02, 0.022, 0.03], bone);
-    M.box(spine, [0, 0.33, -0.1], [0.03, 0.3, 0.03], bone);
-    // shaggy fur mantle on the shoulders and back
-    M.box(spine, [0, 0.55, 0.04], [0.56, 0.12, 0.3], fur);
-    for (let k = 0; k < 6; k++) M.box(spine, [rng.range(-0.25, 0.25), rng.range(0.3, 0.55), 0.13], [0.1, rng.range(0.2, 0.35), 0.06], fur, [rng.range(-0.3, 0.3), 0, rng.range(-0.3, 0.3)]);
-    // skull face
-    M.box(head, [0, 0.14, -0.02], [0.27, 0.3, 0.27], bone);
-    M.box(head, [0, 0.0, -0.08], [0.2, 0.08, 0.17], bone);
-    for (const x of [-0.065, 0.065]) M.box(head, [x, 0.17, -0.155], [0.08, 0.07, 0.02], dark);
-    M.box(head, [0, 0.09, -0.155], [0.04, 0.05, 0.02], dark);
-    const eye = M.mat([0.75, 1.0, 1.0], 8.0);
-    for (const x of [-0.065, 0.065]) M.box(head, [x, 0.17, -0.168], [0.035, 0.03, 0.01], eye);
-    for (let k = 0; k < 5; k++) M.box(r.jaw, [-0.08 + k * 0.04, -0.06, -0.13], [0.022, 0.05, 0.015], bone);
-    // antlers
+    const furC = [0.16, 0.11, 0.08];
+    const fur = M.mat(furC, 0, 0, 1);
+    const furDark = M.mat(M.darkened(furC, 0.35), 0, 0, 1);
+    const furLight = M.mat(M.lightened(furC, 0.12), 0, 0, 1);
+    const bone = M.mat([0.8, 0.78, 0.74]);
+    const antler = M.mat([0.62, 0.6, 0.58]);
+    const mouth = M.mat([0.12, 0.02, 0.02]);
+    const eye = M.mat([1.0, 1.0, 1.0], 8.0);
+    // a few lighter/darker blotches so the fur looks mottled like the picture
+    const blotch = (j, x0, x1, y0, y1, z, n) => {
+      for (let k = 0; k < n; k++) M.box(j, [rng.range(x0, x1), rng.range(y0, y1), z], [rng.range(0.03, 0.07), rng.range(0.03, 0.07), 0.012], rng.randf() < 0.5 ? furDark : furLight);
+    };
+    const r = { hipY: 1.05, neckY: 0.72, headC: [0, 0.15, -0.06] };
+    const hips = M.joint(parent, [0, 1.05, 0]);
+    r.hips = hips;
+    M.box(hips, [0, 0, 0], [0.3, 0.16, 0.18], fur);
     for (const side of [-1, 1]) {
-      const a = M.joint(head, [0.1 * side, 0.27, 0.0]);
-      a.rotation.set(-0.2, 0, -0.5 * side);
-      M.cyl(a, [0, 0.22, 0], 0.018, 0.03, 0.45, bone, 5);
-      for (const [y, ang, len] of [[0.14, 0.9, 0.2], [0.28, -0.8, 0.18], [0.38, 0.7, 0.16]]) {
-        const tine = M.joint(a, [0, y, 0]);
-        tine.rotation.set(ang * 0.6, 0, ang * side);
-        M.cyl(tine, [0, len / 2, 0], 0.008, 0.018, len, bone, 4);
-      }
+      const leg = M.joint(hips, [0.1 * side, -0.04, 0]);
+      M.box(leg, [0, -0.27, 0], [0.12, 0.56, 0.13], fur);
+      blotch(leg, -0.04, 0.04, -0.5, -0.05, -0.07, 3);
+      const knee = M.joint(leg, [0, -0.53, 0]);
+      M.box(knee, [0, -0.24, 0], [0.11, 0.5, 0.12], fur);
+      M.box(knee, [0, -0.5, -0.05], [0.13, 0.06, 0.22], furDark);
+      r[side < 0 ? 'leg_l' : 'leg_r'] = leg;
+      r[side < 0 ? 'knee_l' : 'knee_r'] = knee;
     }
-    // long claws
-    for (const el of [r.elbow_l, r.elbow_r])
-      for (const x of [-0.035, 0, 0.035]) M.box(el, [x, -0.45, -0.02], [0.015, 0.18, 0.02], dark, [0.25, 0, 0]);
+    const spine = M.joint(hips, [0, 0.06, 0]);
+    r.spine = spine;
+    M.box(spine, [0, 0.2, 0], [0.24, 0.36, 0.16], fur);                 // thin waist
+    M.box(spine, [0, 0.52, 0], [0.42, 0.32, 0.22], fur);                // chest
+    M.box(spine, [0, 0.67, 0.01], [0.48, 0.06, 0.2], fur);              // bony shoulders
+    blotch(spine, -0.18, 0.18, 0.1, 0.65, -0.115, 9);
+    for (let k = 0; k < 3; k++) {                                      // ribs on the lower chest
+      M.box(spine, [-0.08, 0.34 + k * 0.06, -0.12], [0.11, 0.025, 0.02], bone);
+      M.box(spine, [0.08, 0.34 + k * 0.06, -0.12], [0.11, 0.025, 0.02], bone);
+    }
+    M.box(spine, [0, 0.4, -0.115], [0.025, 0.16, 0.02], bone);
+    // bone spikes jutting out of the back and right side
+    for (let k = 0; k < 6; k++) {
+      const y = 0.2 + k * 0.09;
+      M.box(spine, [0.12 + k * 0.012, y, 0.1], [0.025, 0.025, 0.2], bone, [0.5, 0.55, 0]);
+    }
+    M.box(spine, [0, 0.72, 0], [0.12, 0.08, 0.12], fur);               // short neck
+    const head = M.joint(spine, [0, 0.74, -0.02]);
+    r.head = head;
+    M.box(head, [0, 0.15, -0.04], [0.28, 0.3, 0.32], fur);             // blocky skull
+    M.box(head, [0, 0.09, -0.26], [0.2, 0.14, 0.16], fur);             // long snout
+    M.box(head, [0, 0.27, -0.06], [0.24, 0.06, 0.26], furDark);
+    blotch(head, -0.1, 0.1, 0.05, 0.25, -0.205, 3);
+    for (const x of [-0.075, 0.075]) M.box(head, [x, 0.2, -0.207], [0.06, 0.035, 0.01], eye, [0, 0, x > 0 ? 0.25 : -0.25]); // slanted eyes
+    M.box(head, [0, 0.04, -0.27], [0.18, 0.04, 0.12], mouth);           // open mouth
+    for (let k = 0; k < 6; k++) M.box(head, [-0.075 + k * 0.03, 0.03, -0.335], [0.016, 0.04, 0.012], bone);   // upper fangs
+    const jaw = M.joint(head, [0, 0.02, -0.12]);
+    r.jaw = jaw;
+    M.box(jaw, [0, -0.03, -0.1], [0.18, 0.05, 0.2], fur);
+    for (let k = 0; k < 6; k++) M.box(jaw, [-0.075 + k * 0.03, 0.01, -0.195], [0.016, 0.04, 0.012], bone);    // lower fangs
+    // big branching antlers
+    for (const side of [-1, 1]) {
+      const a = M.joint(head, [0.1 * side, 0.29, 0.0]);
+      a.rotation.set(-0.15, 0, -0.75 * side);
+      M.box(a, [0, 0.2, 0], [0.035, 0.42, 0.035], antler);
+      for (const [y, ang, len] of [[0.12, 1.0, 0.22], [0.26, -0.7, 0.2], [0.38, 0.9, 0.18], [0.44, -0.4, 0.16]]) {
+        const tine = M.joint(a, [0, y, 0]);
+        tine.rotation.set(rng.range(-0.3, 0.3), 0, ang * side);
+        M.box(tine, [0, len / 2, 0], [0.025, len, 0.025], antler);
+      }
+      const top = M.joint(a, [0, 0.41, 0]);
+      top.rotation.set(0, 0, 0.6 * side);
+      M.box(top, [0, 0.12, 0], [0.025, 0.24, 0.025], antler);
+    }
+    // arms long enough to hang past the knees, white claws
+    for (const side of [-1, 1]) {
+      const arm = M.joint(spine, [0.26 * side, 0.65, 0]);
+      M.box(arm, [0, -0.29, 0], [0.1, 0.6, 0.11], fur);
+      blotch(arm, -0.03, 0.03, -0.55, -0.05, -0.06, 2);
+      const elbow = M.joint(arm, [0, -0.58, 0]);
+      M.box(elbow, [0, -0.28, 0], [0.09, 0.58, 0.1], fur);
+      M.box(elbow, [0, -0.6, 0], [0.11, 0.08, 0.08], furDark);
+      for (const x of [-0.04, -0.013, 0.013, 0.04]) M.box(elbow, [x, -0.74, -0.01], [0.018, 0.22, 0.02], bone, [0.15, 0, 0]);
+      r[side < 0 ? 'arm_l' : 'arm_r'] = arm;
+      r[side < 0 ? 'elbow_l' : 'elbow_r'] = elbow;
+    }
     return r;
   };
 

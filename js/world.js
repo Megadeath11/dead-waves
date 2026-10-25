@@ -546,7 +546,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       if (type === 'runner') spd = DW.randf(4.0, 4.9);
       else if (type === 'brute') { hp = Math.max(6000, hp * 16) * (1 + 0.6 * (n - 1)); spd = 3.1; dmg = 65; }
       else if (type === 'spitter') { hp = Math.max(5000, hp * 13) * (1 + 0.6 * (n - 1)); spd = 2.7; dmg = 42; }
-      else if (type === 'goonlord') { hp = Math.max(45000, hp * 45) * (1 + 0.7 * (n - 1)); spd = 3.3; dmg = 95; }
+      else if (type === 'goonlord') { hp = Math.max(45000, hp * 45) * (1 + 0.7 * (n - 1)); spd = 4.4; dmg = 95; } // it runs
       const id = this.nextZid++;
       const z = new DW.Zombie(this, id, type, hp, spd * this.diff.spd, dmg * this.diff.dmg, false, pos);
       this.zombies.set(id, z);
