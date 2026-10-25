@@ -4,7 +4,7 @@
   const RATE = 22050;
   const TAU = Math.PI * 2;
   const S = DW.Sfx = {};
-  let ctx = null, master = null, musicGain = null;
+  let ctx = null, master = null, musicGain = null, sfxBus = null, musicBus = null, focusMul = 1, musicTrack = 'match';
   const sounds = {};
   let voices = 0;
   const listener = { x: 0, y: 0, z: 0, yaw: 0 };
@@ -142,7 +142,11 @@
     } catch (e) { ctx = null; return; }
     master = ctx.createGain();
     master.connect(ctx.destination);
-    S.setVolume(DW.settings.volume);
+    sfxBus = ctx.createGain();
+    sfxBus.connect(master);
+    musicBus = ctx.createGain();
+    musicBus.connect(master);
+    S.applyVolumes();
     build();
     // resume after autoplay blocks; rebuild the context if the audio device went away
     const resume = () => {
@@ -153,6 +157,9 @@
       S.listening = true;
       window.addEventListener('pointerdown', resume, true);
       window.addEventListener('keydown', resume, true);
+      // optionally go quiet while alt-tabbed
+      window.addEventListener('blur', () => { focusMul = DW.settings.muteUnfocused ? 0 : 1; S.applyVolumes(); });
+      window.addEventListener('focus', () => { focusMul = 1; S.applyVolumes(); });
     }
     ctx.onerror = () => { if ((S.resets = (S.resets || 0) + 1) <= 3) setTimeout(S.reset, 1000); };
   };
@@ -161,12 +168,20 @@
     try { if (ctx) ctx.close(); } catch (e) { /* already closed */ }
     ctx = null;
     musicSrc = null;
-    ambience = null;
+    for (const k in tracks) delete tracks[k];
     voices = 0;
     S.init();
-    if (wasMusic) S.startMusic();
+    if (wasMusic) S.startMusic(musicTrack === 'menu' ? -12 : -14, musicTrack);
   };
-  S.setVolume = v => { if (master) master.gain.value = Math.max(0, +v); };
+  // master volume x (muted while unfocused), plus separate music / effects buses
+  S.applyVolumes = () => {
+    if (!ctx || !master) return;
+    const st = DW.settings, now = ctx.currentTime;
+    master.gain.setTargetAtTime(Math.max(0, +st.volume) * focusMul, now, 0.03);
+    sfxBus.gain.setTargetAtTime(Math.max(0, +st.sfx), now, 0.03);
+    musicBus.gain.setTargetAtTime(Math.max(0, +st.music), now, 0.03);
+  };
+  S.setVolume = () => S.applyVolumes();
   const dbToGain = db => Math.pow(10, db / 20);
 
   function start(buf, gain, rate, pan) {
@@ -181,8 +196,8 @@
       const p = ctx.createStereoPanner();
       p.pan.value = pan;
       g.connect(p);
-      p.connect(master);
-    } else g.connect(master);
+      p.connect(sfxBus);
+    } else g.connect(sfxBus);
     voices++;
     src.onended = () => { voices--; };
     src.start();
@@ -209,30 +224,54 @@
     start(b, gain, pitch * DW.randf(0.93, 1.07), pan);
   };
 
-  // Looping eerie drone for matches (built on first use).
-  let ambience = null, musicSrc = null;
-  S.startMusic = (volDb = -14) => {
-    if (!ctx) return;
-    if (!ambience) {
-      const dur = 12.0, w = [0];
-      ambience = wav(dur, t => {
-        const lfo = 0.5 + 0.5 * Math.sin(TAU * t / dur);
-        const lfo2 = 0.5 + 0.5 * Math.sin(TAU * 3 * t / dur + 1);
-        const drone = Math.sin(TAU * 55 * t) * 0.5 + Math.sin(TAU * 82.5 * t) * 0.3 * lfo + Math.sin(TAU * 110.25 * t) * 0.12 * lfo2;
-        const wind = lp(w, 0.02) * (0.6 + 0.4 * lfo2) * 3;
-        return (drone * 0.35 + wind * 0.25) * 0.8;
+  // Looping eerie drone for matches, and a slower bell-and-pad theme for the menus (built on first use).
+  const tracks = {};
+  function buildTrack(name) {
+    if (name === 'menu') {
+      // 16 s loop; every frequency is a whole number of cycles per loop so it repeats seamlessly
+      const dur = 16.0, w = [0];
+      const bells = [[0, 440], [4, 392], [8, 329.625], [10, 349.25], [12, 293.625]];
+      return wav(dur, t => {
+        const sw = 0.5 + 0.5 * Math.sin(TAU * t / dur - 1.2);
+        const trem = 0.75 + 0.25 * Math.sin(TAU * 4 * t / dur);
+        const pad = (Math.sin(TAU * 110 * t) * 0.4 + Math.sin(TAU * 130.8125 * t) * 0.3 * sw + Math.sin(TAU * 164.8125 * t) * 0.22 * (1 - sw)
+          + Math.sin(TAU * 55 * t) * 0.5) * trem;
+        let bell = 0;
+        for (const [at, f] of bells) {
+          const u = t - at;
+          if (u < 0) continue;
+          const e = Math.exp(-u * 1.3);
+          bell += (Math.sin(TAU * f * u) + Math.sin(TAU * f * 2.76 * u) * 0.35 * Math.exp(-u * 3) + Math.sin(TAU * f * 0.5 * u) * 0.3) * e;
+        }
+        const wind = lp(w, 0.015) * (0.5 + 0.5 * sw) * 3;
+        return (pad * 0.28 + bell * 0.16 + wind * 0.22) * 0.85;
       });
     }
+    const dur = 12.0, w = [0];
+    return wav(dur, t => {
+      const lfo = 0.5 + 0.5 * Math.sin(TAU * t / dur);
+      const lfo2 = 0.5 + 0.5 * Math.sin(TAU * 3 * t / dur + 1);
+      const drone = Math.sin(TAU * 55 * t) * 0.5 + Math.sin(TAU * 82.5 * t) * 0.3 * lfo + Math.sin(TAU * 110.25 * t) * 0.12 * lfo2;
+      const wind = lp(w, 0.02) * (0.6 + 0.4 * lfo2) * 3;
+      return (drone * 0.35 + wind * 0.25) * 0.8;
+    });
+  }
+  let musicSrc = null;
+  S.startMusic = (volDb = -14, track = 'match') => {
+    if (!ctx) return;
+    if (!tracks[track]) tracks[track] = buildTrack(track);
     S.stopMusic();
+    musicTrack = track;
     musicSrc = ctx.createBufferSource();
-    musicSrc.buffer = ambience;
+    musicSrc.buffer = tracks[track];
     musicSrc.loop = true;
     musicGain = ctx.createGain();
     musicGain.gain.value = dbToGain(volDb);
     musicSrc.connect(musicGain);
-    musicGain.connect(master);
+    musicGain.connect(musicBus);
     musicSrc.start();
   };
+  S.menuMusic = () => { if (!musicSrc || musicTrack !== 'menu') S.startMusic(-12, 'menu'); };
   S.stopMusic = () => {
     if (musicSrc) { try { musicSrc.stop(); } catch (e) { /* already stopped */ } musicSrc = null; }
   };

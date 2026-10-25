@@ -28,10 +28,13 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
+- **Settings** in five tabs: graphics (quality presets Low-Ultra, render resolution, shadows, lamp lights, particles, anti-aliasing, brightness, FOV, FPS limit and counter), audio (master / music / effects, mute when alt-tabbed), controls (sensitivity, aim sensitivity, invert Y, toggle aim / crouch), key bindings for every action, and HUD (crosshair colour and size, hit markers, point popups, HUD size, view bob, screen shake).
 - Local stats and best runs per map and difficulty.
 - No asset files: models, textures, music and sounds are all generated in code.
 
 ## Controls
+
+Default keys; every one can be changed under Settings > Key bindings.
 
 | Action | Key |
 |---|---|

@@ -6,7 +6,6 @@
   const MAX_ALIVE = 24;
   const SNAP_RATE = 1 / 15;
   const PSTATE_RATE = 1 / 20;
-  const LAMP_LIGHTS = 8;
   const PU_TYPES = ['max_ammo', 'double', 'insta', 'nuke'];
   const PU_INFO = {
     max_ammo: { name: 'MAX AMMO', color: [0.3, 0.9, 0.3], letter: 'A' },
@@ -127,8 +126,9 @@
         const dir = new THREE.Vector3(0, 0, -1).applyEuler(e);
         moon.position.copy(dir).multiplyScalar(-40);
         moon.target.position.set(0, 0, 0);
-        moon.castShadow = true;
-        moon.shadow.mapSize.set(2048, 2048);
+        const ss = DW.SHADOW_SIZES[DW.settings.shadows] || 0;
+        moon.castShadow = ss > 0;
+        moon.shadow.mapSize.set(ss || 1024, ss || 1024);
         const sc = moon.shadow.camera;
         sc.left = -40; sc.right = 40; sc.top = 40; sc.bottom = -40; sc.near = 1; sc.far = 100;
         moon.shadow.bias = -0.0006;
@@ -137,9 +137,11 @@
         s.add(moon.target);
         this.moon = moon;
       }
-      // fixed pool of point lights (changing the light count would recompile every shader)
+      // fixed pool of point lights (changing the light count would recompile every shader,
+      // so the Lamp lights setting only takes effect on the next match)
       this.lampLights = [];
-      for (let i = 0; i < LAMP_LIGHTS; i++) {
+      const nLamps = DW.clamp(DW.settings.lights | 0, 2, 8);
+      for (let i = 0; i < nLamps; i++) {
         const l = new THREE.PointLight(0xffffff, 0, 10, 1.3);
         s.add(l);
         this.lampLights.push(l);
@@ -152,6 +154,18 @@
       this.goonLight = new THREE.PointLight(0xcfe6ff, 0, 6, 1.5);     // cold light on the Goon Lord's face
       s.add(this.darkLight, this.goonLight);
       s.add(this.muzzleLight, this.boomLight, this.remoteLight, ...this.puLights);
+    }
+
+    // live graphics changes from the settings menu (shadow quality; the renderer side is in main.js)
+    applyGraphics() {
+      const m = this.moon;
+      if (!m) return;
+      const ss = DW.SHADOW_SIZES[DW.settings.shadows] || 0;
+      if (m.castShadow !== ss > 0 || (ss && m.shadow.mapSize.x !== ss)) {
+        m.castShadow = ss > 0;
+        if (ss) m.shadow.mapSize.set(ss, ss);
+        if (m.shadow.map) { m.shadow.map.dispose(); m.shadow.map = null; }
+      }
     }
 
     buildFx() {
@@ -1365,6 +1379,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
 
     burst(at, col, amount, speed, life) {
       const c = M.color(col);
+      amount = Math.max(1, Math.round(amount * [0.35, 1, 1.7][DW.settings.particles]));
       for (let i = 0; i < amount; i++) {
         if (this.particles.length >= this.pMax) this.particles.shift();
         // random direction on a sphere

@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const UI = DW.UI, Net = DW.Net, Maps = DW.Maps;
-  let renderer, canvas, world = null, screen = null, current = 'main';
+  let renderer, canvas, world = null, screen = null, current = 'main', menuBg = null, fpsEl = null, pixelRatio = 0;
   let toastT = 0, toastEl = null, browseList = null;
   let lbMap = 0, lbDiff = 0;
   const params = new URLSearchParams(location.search);
@@ -13,16 +13,18 @@
     DW.loadStats();
     DW.Sfx.init();
     canvas = document.getElementById('game');
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    // anti-aliasing is fixed when the WebGL context is made, so that option needs a restart
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: !!DW.settings.aa, powerPreference: 'high-performance' });
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    fpsEl = document.getElementById('fps');
+    buildMenuBg();
     window.addEventListener('resize', resize);
-    resize();
+    DW.onSettings = applyGraphics;
     DW.applySettings();
+    resize();
 
     // any click in a running match captures the mouse (not clicks on menu buttons or sliders)
     window.addEventListener('mousedown', e => {
@@ -36,7 +38,9 @@
       else if (!locked && !world.hud.isPaused() && !DW.botActive) world.hud.openPause();
     };
     window.addEventListener('keydown', e => {
-      if (e.code === 'Escape' && world && !world.gameOver && world.hud.isPaused()) world.hud.resume();
+      if (e.code !== 'Escape') return;
+      if (world && !world.gameOver && world.hud.isPaused()) world.hud.resume();
+      else if (!world && ['setup', 'browse', 'leaderboard', 'stats', 'settings'].includes(current)) showScreen('main');
     });
 
     Net.on('lobby_updated', onLobbyUpdated);
@@ -48,13 +52,21 @@
       if (params.has('playtest') && DW.Bot) DW.Bot.run(params);
     });
     showScreen('main');
-    let last = performance.now(), lastRaf = 0;
+    let last = performance.now(), lastRaf = 0, fpsN = 0, fpsT = performance.now();
     const frame = now => {
       requestAnimationFrame(frame);
       lastRaf = performance.now();
+      // FPS limit: skip display frames until the next one is due (0.5 ms slack for timer jitter)
+      const cap = DW.settings.fpsCap;
+      if (cap > 0 && now - last < 1000 / cap - 0.5) return;
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       tick(dt);
+      fpsN++;
+      if (now - fpsT >= 500) {
+        if (DW.settings.showFps) fpsEl.textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' FPS';
+        fpsN = 0; fpsT = now;
+      }
     };
     requestAnimationFrame(frame);
     // bot test runs keep going when the page is hidden (rAF stops there)
@@ -83,6 +95,51 @@
     DW.Input.endFrame();
   }
 
+  // renderer-side graphics options (called whenever a setting changes)
+  function applyGraphics() {
+    const st = DW.settings;
+    const pr = Math.min((window.devicePixelRatio || 1) * st.renderScale, 2.5);
+    if (pr !== pixelRatio) { pixelRatio = pr; renderer.setPixelRatio(pr); resize(); }
+    renderer.toneMappingExposure = 1.25 * st.brightness;
+    if (fpsEl) { fpsEl.style.display = st.showFps ? 'block' : 'none'; if (!st.showFps) fpsEl.textContent = ''; }
+    if (world) world.applyGraphics();
+  }
+
+  // drifting fog and rising embers behind every menu screen
+  function buildMenuBg() {
+    menuBg = UI.el('div', 'menubg');
+    menuBg.innerHTML = '<div class="fog f1"></div><div class="fog f2"></div><canvas class="embers"></canvas><div class="menuvig"></div>';
+    document.getElementById('ui').prepend(menuBg);
+    const cv = menuBg.querySelector('canvas'), g = cv.getContext('2d');
+    const embers = [];
+    const spawn = (y) => ({ x: Math.random() * 1600, y: y !== undefined ? y : 900 + Math.random() * 40, vx: (Math.random() - 0.3) * 18,
+      vy: -(15 + Math.random() * 45), r: 0.8 + Math.random() * 2.2, life: 0, max: 6 + Math.random() * 10, ph: Math.random() * 6.28 });
+    for (let i = 0; i < 70; i++) embers.push(spawn(Math.random() * 900));
+    let lt = performance.now();
+    const draw = now => {
+      requestAnimationFrame(draw);
+      const dt = Math.min((now - lt) / 1000, 0.05);
+      lt = now;
+      if (world || menuBg.style.display === 'none') return;
+      const W = Math.round(menuBg.clientWidth) || 1600, H = Math.round(menuBg.clientHeight) || 900;
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      g.clearRect(0, 0, W, H);
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < embers.length; i++) {
+        const e = embers[i];
+        e.life += dt;
+        e.x += (e.vx + Math.sin(now / 900 + e.ph) * 12) * dt;
+        e.y += e.vy * dt;
+        if (e.life > e.max || e.y < -20) { embers[i] = spawn(); continue; }
+        const a = Math.min(1, e.life) * Math.min(1, (e.max - e.life) / 2) * (0.55 + 0.45 * Math.sin(now / 160 + e.ph));
+        g.fillStyle = `rgba(255,${90 + (e.ph * 20 | 0)},40,${(a * 0.8).toFixed(3)})`;
+        g.beginPath(); g.arc(e.x * W / 1600, e.y * H / 900, e.r, 0, 6.283); g.fill();
+      }
+      g.globalCompositeOperation = 'source-over';
+    };
+    requestAnimationFrame(draw);
+  }
+
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
     renderer.setSize(w, h, false);
@@ -107,6 +164,8 @@
     if (screen) screen.remove();
     screen = UI.el('div', 'screen');
     document.getElementById('ui').appendChild(screen);
+    menuBg.style.display = 'block';
+    DW.Sfx.menuMusic();
     ({ main: mainMenu, setup: setupMenu, lobby: lobbyMenu, browse: browseMenu, leaderboard: leaderboardMenu, stats: statsMenu, settings: settingsMenu })[name]();
     toastEl = UI.el('div', 'toast');
     screen.appendChild(toastEl);
@@ -120,25 +179,73 @@
     return v;
   }
 
+  function tips() {
+    const K = a => DW.Input.keyName(a);
+    return [
+      'Headshots while you are in the air are crits: double damage.',
+      'The Mystery Box opens on wave 5. The Death Machine is its rarest prize.',
+      'Pack-a-Poonch costs 20,000 for 4x damage, and can go two tiers further.',
+      `Wind charge (${K('weapon_3')}) blasts zombies back. Aim at the floor to launch yourself.`,
+      `Sentries cost 8,000. Place up to four with ${K('sentry')}.`,
+      'Max Ammo reloads every gun on the spot and tops grenades up to 4.',
+      `Everyone pressing ${K('skip')} skips the break between rounds.`,
+      'Wave 20. The lights go out. It stares before it runs.',
+      'Downed players are ignored. Get up and you have 3 seconds of grace.',
+      'Iron Hide, Fast Hands, Double Tap... buy perks early, the box can wait.',
+      'Bosses enrage at half health: faster, angrier, bigger slams.',
+    ];
+  }
+
   function mainMenu() {
     const v = UI.el('div', 'mainmenu');
     v.appendChild(UI.el('div', 'title', 'DEAD WAVES'));
-    v.appendChild(UI.el('div', 'dim big', 'Survive the night. Together.'));
-    v.appendChild(UI.el('div', 'spacer'));
-    v.appendChild(UI.button('Solo', () => showScreen('setup')));
-    const host = UI.button('Host co-op (Steam)', () => { Net.hostLobby(); toast('Creating lobby...'); });
-    host.disabled = !Net.steamOk;
-    v.appendChild(host);
-    const find = UI.button('Join co-op game', () => { showScreen('browse'); Net.findLobbies(); });
-    find.disabled = !Net.steamOk;
-    v.appendChild(find);
-    v.appendChild(UI.button('Leaderboards', () => showScreen('leaderboard')));
-    v.appendChild(UI.button('Stats', () => showScreen('stats')));
-    v.appendChild(UI.button('Settings', () => showScreen('settings')));
-    v.appendChild(UI.button('Quit', () => { if (window.desktop) window.desktop.quit(); else window.close(); }));
+    v.appendChild(UI.el('div', 'tagline', 'Survive the night. Together.'));
     v.appendChild(UI.el('div', 'spacer small'));
-    v.appendChild(UI.el('div', 'dim', `${Net.status}   -   v${DW.VERSION}`));
+    const items = [];
+    items.push(UI.button('Solo', () => showScreen('setup'), 'mm primary'));
+    const host = UI.button('Host co-op', () => { Net.hostLobby(); toast('Creating lobby...'); }, 'mm');
+    host.disabled = !Net.steamOk;
+    items.push(host);
+    const find = UI.button('Join co-op', () => { showScreen('browse'); Net.findLobbies(); }, 'mm');
+    find.disabled = !Net.steamOk;
+    items.push(find);
+    items.push(UI.button('Leaderboards', () => showScreen('leaderboard'), 'mm'));
+    items.push(UI.button('Stats', () => showScreen('stats'), 'mm'));
+    items.push(UI.button('Settings', () => showScreen('settings'), 'mm'));
+    items.push(UI.button('Quit', () => { if (window.desktop) window.desktop.quit(); else window.close(); }, 'mm'));
+    items.forEach((b, i) => { b.style.animationDelay = (0.08 + i * 0.05) + 's'; v.appendChild(b); });
     screen.appendChild(v);
+
+    // right-hand card: last run, best wave, a tip
+    const card = UI.el('div', 'menucard panel');
+    const s = DW.stats;
+    const runs = s.runs || [];
+    const lastRun = runs.filter(r => (r.wave | 0) > 0).pop();
+    card.appendChild(UI.el('div', 'label', 'LAST RUN'));
+    if (lastRun) {
+      const m = (Maps.MAPS[lastRun.map] || { name: lastRun.map }).name;
+      card.appendChild(UI.el('div', 'h3', `Wave ${lastRun.wave | 0}  -  ${m}`));
+      card.appendChild(UI.el('div', 'dim', `${DW.DIFFS[lastRun.diff | 0].name}  -  ${lastRun.kills | 0} kills  -  ${lastRun.players > 1 ? lastRun.players + ' players' : 'solo'}`));
+    } else card.appendChild(UI.el('div', 'dim', 'No runs yet. The night is waiting.'));
+    const best = Object.values(s.best_wave || {}).reduce((a, b) => Math.max(a, b | 0), 0);
+    card.appendChild(UI.el('div', 'label', 'BEST WAVE'));
+    card.appendChild(UI.el('div', 'h2 gold', best > 0 ? String(best) : '-'));
+    card.appendChild(UI.el('div', 'dim small', `${s.kills | 0} zombies killed in ${s.games | 0} games`));
+    const tipL = UI.el('div', 'tip');
+    const all = tips();
+    let ti = Math.floor(Math.random() * all.length);
+    const setTip = () => { tipL.textContent = all[ti % all.length]; tipL.classList.remove('fade'); void tipL.offsetWidth; tipL.classList.add('fade'); ti++; };
+    setTip();
+    const timer = setInterval(() => { if (!tipL.isConnected) clearInterval(timer); else setTip(); }, 7000);
+    card.appendChild(UI.el('div', 'label', 'TIP'));
+    card.appendChild(tipL);
+    screen.appendChild(card);
+
+    const foot = UI.el('div', 'menufoot');
+    foot.appendChild(UI.el('span', Net.steamOk ? 'ok' : 'warn', Net.steamOk ? '\u25CF ' : '\u25CB '));
+    foot.appendChild(UI.el('span', '', `${Net.status}`));
+    foot.appendChild(UI.el('span', 'ver', `v${DW.VERSION}`));
+    screen.appendChild(foot);
   }
 
   function selectedStyle(b, on) { if (on) b.classList.add('selected'); }
@@ -303,9 +410,10 @@
   }
 
   function settingsMenu() {
-    const v = frame('SETTINGS');
-    v.appendChild(UI.settingsPanel());
-    v.appendChild(UI.el('div', 'dim pre', 'Controls: WASD move - Shift sprint - Ctrl/C crouch - Space jump - LMB fire - RMB aim\nR reload - 1/2/Q/wheel switch - V or MMB knife - G grenade - E buy/revive - Tab scores - Esc menu'));
+    const v = frame('SETTINGS', 'Changes save as you make them.');
+    const p = UI.el('div', 'panel settingsbox');
+    p.appendChild(UI.settingsPanel());
+    v.appendChild(p);
     v.appendChild(UI.button('Back', () => showScreen('main'), 'narrow'));
   }
 
@@ -319,6 +427,7 @@
   function startMatch(cfg) {
     if (world) { world.dispose(); world = null; }
     if (screen) screen.style.display = 'none';
+    menuBg.style.display = 'none';
     world = new DW.World(cfg, renderer);
     DW.world = world;
     world.resize(window.innerWidth, window.innerHeight);

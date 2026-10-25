@@ -109,10 +109,11 @@
 
     look() {
       const wd = this.wdata();
-      let sens = DW.settings.sens * 0.01 * DW.lerp(1, 0.55, this.adsAmt);
+      const st = DW.settings;
+      let sens = st.sens * 0.01 * DW.lerp(1, 0.55 * st.adsSens, this.adsAmt);
       if (wd.ads === 0) sens *= DW.lerp(1, 0.5, this.adsAmt);
       this.yaw -= I.mouseDX * sens;
-      this.pitch = DW.clamp(this.pitch - I.mouseDY * sens, -1.5, 1.5);
+      this.pitch = DW.clamp(this.pitch - I.mouseDY * sens * (st.invertY ? -1 : 1), -1.5, 1.5);
       if (I.wheel && !this.downed) this.cycleWeapon();
     }
 
@@ -123,7 +124,11 @@
       let dx = ix * c + iy * s, dz = -ix * s + iy * c;
       const dl = Math.hypot(dx, dz);
       if (dl > 1e-4) { dx /= dl; dz /= dl; }
-      this.crouching = canAct && I.action('crouch') && !this.downed;
+      if (DW.settings.toggleCrouch) {
+        if (canAct && I.justPressed('crouch')) this.crouchOn = !this.crouchOn;
+        if (I.action('sprint') || I.justPressed('jump')) this.crouchOn = false;
+      } else this.crouchOn = I.action('crouch');
+      this.crouching = canAct && this.crouchOn && !this.downed;
       this.sprinting = canAct && I.action('sprint') && iy < -0.3 && this.adsAmt < 0.3 && !this.downed && !this.crouching && this.fireCd <= 0;
       let spd = WALK;
       if (this.sprinting) spd = SPRINT;
@@ -150,7 +155,7 @@
         this.bobT += dt * hs * 1.6;
         if (Math.floor(this.bobT / Math.PI) !== before) DW.Sfx.play('step', this.sprinting ? -12 : -16, DW.randf(0.85, 1.1));
       }
-      this.pivotY = this.camHeight + Math.sin(this.bobT * 2) * 0.03 * Math.min(hs / 5, 1.5) * (1 - this.adsAmt);
+      this.pivotY = this.camHeight + (DW.settings.bob ? Math.sin(this.bobT * 2) * 0.03 * Math.min(hs / 5, 1.5) * (1 - this.adsAmt) : 0);
     }
 
     spectate(dt) {
@@ -168,7 +173,7 @@
       this.camera.position.set(this.pos.x, this.pos.y + (this.pivotY || 1.65), this.pos.z);
       // screen shake moves the camera and rolls it, but never changes where it points,
       // so the dot and your shots stay lined up
-      const sh = Math.min(this.world.camShake || 0, 1.5);
+      const sh = Math.min(this.world.camShake || 0, 1.5) * DW.settings.shake;
       let roll = 0;
       if (sh > 0) {
         const j = () => (Math.random() * 2 - 1) * 0.07 * sh;
@@ -217,7 +222,11 @@
 
     combat(dt) {
       const w = this.world, hud = w.hud;
-      const wantAds = I.action('ads') && !this.sprinting && !this.reloading && this.switchT <= 0;
+      if (DW.settings.toggleAds && !I.force.ads) {
+        if (I.justPressed('ads')) this.adsOn = !this.adsOn;
+        if (this.sprinting || this.switchT > 0 || this.downed) this.adsOn = false;
+      } else this.adsOn = I.action('ads');
+      const wantAds = this.adsOn && !this.sprinting && !this.reloading && this.switchT <= 0;
       this.adsAmt = DW.moveToward(this.adsAmt, wantAds ? 1 : 0, dt * 6.5);
       const trig = I.action('fire') && (I.locked || I.force.fire);
       if (trig) this.tryFire();
@@ -260,7 +269,7 @@
       const a = this.adsAmt;
       const p = [DW.lerp(hip[0], aim[0], a), DW.lerp(hip[1], aim[1], a), DW.lerp(hip[2], aim[2], a)];
       const hs = Math.hypot(this.vel.x, this.vel.z);
-      const bob = Math.min(hs / 5, 1.5) * (1 - a * 0.8);
+      const bob = Math.min(hs / 5, 1.5) * (1 - a * 0.8) * (DW.settings.bob ? 1 : 0.3);
       p[0] += Math.cos(this.bobT) * 0.012 * bob;
       p[1] += Math.abs(Math.sin(this.bobT)) * 0.012 * bob;
       p[2] += this.recoil * 0.012;

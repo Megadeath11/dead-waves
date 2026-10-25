@@ -10,6 +10,47 @@
     grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], weapon_3: ['Digit3', 'Mouse3', 'Mouse4'], swap: ['KeyQ'],
     scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'], weapon_4: ['Digit4'], skip: ['Enter', 'NumpadEnter'], sentry: ['KeyT'],
   };
+  // the first key of each action can be rebound in Settings; the extra keys stay unless another action took them
+  const DEFAULTS = JSON.parse(JSON.stringify(MAP));
+  I.DEFAULTS = DEFAULTS;
+  I.applyBinds = binds => {
+    const prim = {};
+    for (const a in DEFAULTS) prim[a] = (binds && binds[a]) || DEFAULTS[a][0];
+    const taken = new Set(Object.values(prim));
+    for (const a in DEFAULTS) MAP[a] = [prim[a], ...DEFAULTS[a].slice(1).filter(c => !taken.has(c))];
+  };
+  // rebinding: a key another action already uses as its main key swaps over to that action
+  I.bind = (action, code) => {
+    const binds = DW.settings.binds = DW.settings.binds || {};
+    const old = MAP[action][0];
+    for (const a in MAP) if (a !== action && MAP[a][0] === code) binds[a] = old;
+    binds[action] = code;
+    for (const a in binds) if (binds[a] === DEFAULTS[a][0]) delete binds[a];
+    I.applyBinds(binds);
+  };
+  I.primary = action => MAP[action][0];
+  const NAMES = { Mouse0: 'Left click', Mouse1: 'Middle click', Mouse2: 'Right click', Mouse3: 'Mouse 4', Mouse4: 'Mouse 5',
+    Space: 'Space', ShiftLeft: 'L-Shift', ShiftRight: 'R-Shift', ControlLeft: 'L-Ctrl', ControlRight: 'R-Ctrl', AltLeft: 'L-Alt', AltRight: 'R-Alt',
+    Enter: 'Enter', NumpadEnter: 'Num Enter', Tab: 'Tab', Backquote: '`', CapsLock: 'Caps Lock', Backspace: 'Backspace',
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
+    Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Backslash: '\\' };
+  I.codeName = c => NAMES[c] || (c || '?').replace(/^Key|^Digit/, '').replace(/^Numpad/, 'Num ');
+  I.keyName = action => I.codeName(MAP[action][0]);
+  // next key or mouse button goes to cb (Escape cancels with null); swallows the event so nothing else reacts
+  I.capture = cb => {
+    const done = (e, code) => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onMouse, true);
+      setTimeout(() => cb(code), 0);
+    };
+    const onKey = e => done(e, e.code === 'Escape' ? null : e.code);
+    const onMouse = e => done(e, 'Mouse' + e.button);
+    setTimeout(() => {
+      window.addEventListener('keydown', onKey, true);
+      window.addEventListener('mousedown', onMouse, true);
+    }, 0);
+  };
   const down = new Set();
   let pressed = new Set(); // went down since last frame
   I.force = {};

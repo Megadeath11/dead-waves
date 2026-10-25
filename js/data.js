@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.5.5';
+DW.VERSION = '2.6.0';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -131,7 +131,27 @@ DW.css = c => `rgb(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.ro
 
 // ---------------------------------------------------------------- settings & stats (localStorage)
 
-DW.settings = { sens: 0.2, fov: 80, volume: 0.8, fullscreen: false };
+DW.SETTING_DEFAULTS = {
+  // controls
+  sens: 0.2, adsSens: 1, invertY: false, toggleAds: false, toggleCrouch: false, binds: {},
+  // audio
+  volume: 0.8, music: 0.7, sfx: 1, muteUnfocused: true,
+  // graphics (quality 0-3 is a preset, 4 = custom)
+  fullscreen: false, fov: 80, quality: 2, renderScale: 1, shadows: 2, aa: true, lights: 8, particles: 1,
+  brightness: 1, fpsCap: 0, showFps: false, shake: 1, bob: true,
+  // hud
+  xhColor: 0, xhSize: 6, hitmarkers: true, popups: true, hudScale: 1,
+};
+// Low / Medium / High / Ultra
+DW.QUALITY_PRESETS = [
+  { renderScale: 0.6, shadows: 0, aa: false, lights: 2, particles: 0 },
+  { renderScale: 0.8, shadows: 1, aa: true, lights: 4, particles: 1 },
+  { renderScale: 1, shadows: 2, aa: true, lights: 8, particles: 1 },
+  { renderScale: 1.25, shadows: 3, aa: true, lights: 8, particles: 2 },
+];
+DW.SHADOW_SIZES = [0, 1024, 2048, 4096];
+DW.XH_COLORS = [['White', '#ffffff'], ['Green', '#52ff6a'], ['Cyan', '#40e8ff'], ['Yellow', '#ffe14d'], ['Pink', '#ff5cd6'], ['Red', '#ff3a2e']];
+DW.settings = JSON.parse(JSON.stringify(DW.SETTING_DEFAULTS));
 DW.stats = {};
 DW.mapId = 'outpost';
 DW.diffId = 1;
@@ -146,12 +166,32 @@ function writeJSON(key, v) {
 
 DW.loadSettings = () => {
   const s = readJSON('dw.settings');
-  if (s) for (const k in DW.settings) if (k in s) DW.settings[k] = s[k];
+  if (s) for (const k in DW.settings) if (k in s && typeof s[k] === typeof DW.SETTING_DEFAULTS[k]) DW.settings[k] = s[k];
 };
 DW.saveSettings = () => writeJSON('dw.settings', DW.settings);
+DW.resetSettings = group => {
+  const keep = DW.settings;
+  DW.settings = JSON.parse(JSON.stringify(DW.SETTING_DEFAULTS));
+  if (group) for (const k in keep) if (!group.includes(k)) DW.settings[k] = keep[k];
+  DW.applySettings();
+  DW.saveSettings();
+};
+// Everything that can change live; the renderer bits (shadows, scale) are handled in main.js / world.js.
 DW.applySettings = () => {
-  if (DW.Sfx) DW.Sfx.setVolume(DW.settings.volume);
-  const fs = !!DW.settings.fullscreen;
+  const st = DW.settings;
+  if (DW.Sfx) DW.Sfx.applyVolumes();
+  if (DW.Input && DW.Input.applyBinds) DW.Input.applyBinds(st.binds);
+  const ui = document.getElementById('ui');
+  if (ui) {
+    ui.style.setProperty('--xh', (DW.XH_COLORS[st.xhColor] || DW.XH_COLORS[0])[1]);
+    ui.style.setProperty('--xhs', st.xhSize + 'px');
+    ui.style.setProperty('--hud', st.hudScale);
+  }
+  if (DW.onSettings) DW.onSettings();
+  // only touch the window when the Fullscreen option itself changed (F11 stays in charge otherwise)
+  const fs = !!st.fullscreen;
+  if (DW.fsApplied === fs) return;
+  DW.fsApplied = fs;
   if (window.desktop) window.desktop.fullscreen(fs);
   else if (fs && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   else if (!fs && document.fullscreenElement) document.exitFullscreen().catch(() => {});

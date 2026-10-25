@@ -75,7 +75,7 @@
       this.dmgDirT = Math.max(this.dmgDirT - dt * 1.2, 0);
       this.dmgDir.style.opacity = this.dmgDirT.toFixed(3);
       this.hitT = Math.max(this.hitT - dt * 4, 0);
-      this.hitmark.style.opacity = this.hitT.toFixed(3);
+      this.hitmark.style.opacity = DW.settings.hitmarkers ? this.hitT.toFixed(3) : '0';
       this.centerT -= dt;
       if (this.centerT <= 0) this.centerL.style.opacity = Math.max(0, +this.centerL.style.opacity - dt * 2).toFixed(3);
       this.pointsFlash = Math.max(this.pointsFlash - dt * 3, 0);
@@ -93,7 +93,7 @@
       if (w.state === 'intermission' && w.wave > 0 && !w.gameOver) {
         pu.push(`Next wave in ${Math.ceil(Math.max(w.stateT, 0))}`);
         const [n, of] = w.skipCount || [0, 1];
-        if (w.stateT > 3) pu.push(w.mySkip ? `Skip vote sent (${n}/${of})` : `Press ENTER to skip${of > 1 ? ` (${n}/${of} ready)` : ''}`);
+        if (w.stateT > 3) pu.push(w.mySkip ? `Skip vote sent (${n}/${of})` : `Press ${DW.Input.keyName('skip').toUpperCase()} to skip${of > 1 ? ` (${n}/${of} ready)` : ''}`);
       }
       this.set(this.puL, 'pu', pu.join('\n'));
 
@@ -109,7 +109,8 @@
       this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
       this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(wd.mag / 4) ? RED : BONE);
-      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades} [G]    Wind: ${p.wind.mag}/${DW.WIND_CHARGES} [3]    Sentries: ${w.mySentries()}/${DW.SENTRY_MAX} [T] ${DW.SENTRY_COST}`);
+      const K = DW.Input.keyName;
+      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades} [${K('grenade')}]    Wind: ${p.wind.mag}/${DW.WIND_CHARGES} [${K('weapon_3')}]    Sentries: ${w.mySentries()}/${DW.SENTRY_MAX} [${K('sentry')}] ${DW.SENTRY_COST}`);
       const lowMag = a.mag <= Math.max(1, Math.floor(wd.mag / 4));
       let hint = '';
       if (p.dead || p.reloading || a.id === 'wind') hint = '';
@@ -228,7 +229,7 @@
       for (const r of w.remotes.values()) {
         if (!r.down || r.dead) continue;
         const reviving = r.reviveAt !== undefined && w.elapsed - r.reviveAt < 0.4;
-        const sub = reviving ? `REVIVING ${Math.round((r.reviveP || 0) * 100)}%` : `${Math.max(0, Math.ceil(r.bleedT || 0))}s - hold E to revive`;
+        const sub = reviving ? `REVIVING ${Math.round((r.reviveP || 0) * 100)}%` : `${Math.max(0, Math.ceil(r.bleedT || 0))}s - hold ${DW.Input.keyName('interact')} to revive`;
         list.push({ x: r.posV.x, y: r.posV.y + 1.1, z: r.posV.z, icon: '+', text: `${r.name} DOWN`, sub, cls: reviving ? 'mk-revive' : 'mk-down' });
       }
       if (w.state === 'wave' && w.remaining() === 1 && w.zombies.size === 1) {
@@ -307,6 +308,8 @@
     // ---------------------------------------------------------------- events
     damageDir(angle) { this.dmgDir.style.transform = `rotate(${angle}rad)`; this.dmgDirT = 1; }
     setInteract(text, progress, affordable = true) {
+      // prompts are written with E; show whatever key Use is bound to
+      if (text) text = text.replace(/(Press|Hold|hold) E/g, `$1 ${DW.Input.keyName('interact')}`);
       this.set(this.interactL, 'it', text);
       this.interactL.style.color = UI.rgb(affordable ? BONE : [1.0, 0.45, 0.4]);
       this.interactBar.style.display = progress > 0 ? 'block' : 'none';
@@ -330,7 +333,7 @@
     flashDamage(d) { this.dmgAlpha = DW.clamp(this.dmgAlpha + d / 60, 0, 1); }
     flashPoints() { this.pointsFlash = 1; }
     popupPoints(n) {
-      if (!n) return;
+      if (!n || !DW.settings.popups) return;
       const l = UI.el('div', 'popup', n > 0 ? '+' + n : String(n));
       l.style.left = (170 + DW.randf(-10, 30)) + 'px';
       this.popups.appendChild(l);
@@ -352,7 +355,7 @@
       panel.appendChild(UI.el('div', 'h1 c', w.solo ? 'PAUSED' : 'MENU'));
       if (!w.solo) panel.appendChild(UI.el('div', 'dim c', 'The game keeps running in co-op.'));
       panel.appendChild(UI.settingsPanel());
-      const row = UI.el('div', 'col center');
+      const row = UI.el('div', 'row center');
       row.appendChild(UI.button('Resume', () => this.resume()));
       row.appendChild(UI.button('Quit to menu', () => w.quitMatch()));
       panel.appendChild(row);

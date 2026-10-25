@@ -9,7 +9,7 @@ Co-op: everyone needs DeadWaves.exe. One player clicks "Host co-op (Steam)" then
 "Invite friends" or "Copy code". The others open the game first, then accept the invite
 or click "Join co-op game" and paste the code.
 
-Controls
+Controls (defaults - change any key under Settings > Key bindings)
   WASD move, Shift sprint, Ctrl/C crouch, Space jump
   Left mouse fire, Right mouse aim (no spread: shots go exactly where the dot is)
   R reload, 1/2/Q/mouse wheel switch gun, 3 wind charge, V knife, G grenade
@@ -17,6 +17,11 @@ Controls
   E buy / open doors / ride elevators / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
   T place a sentry turret (8,000, up to 4 each), Tab players online with stats and ping
   Jumping headshots are crits (double damage).
+
+Settings: graphics presets (Low to Ultra) plus render resolution, shadows, FPS limit
+and an FPS counter; separate music / effects volume; aim sensitivity, invert Y,
+toggle aim / crouch; crosshair colour and size; HUD size; view bob and screen shake.
+If the game runs slowly, pick Low or turn Render resolution down.
 
 If Windows SmartScreen says "Windows protected your PC", click "More info"
 then "Run anyway" - the exe isn't code-signed.
