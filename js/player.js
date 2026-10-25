@@ -15,7 +15,7 @@
       this.yaw = Math.PI;
       this.pitch = 0;
       this.onFloor = false;
-      this.hp = 100; this.maxHp = 100; this.regenDelay = 0;
+      this.hp = 100; this.maxHp = 100; this.regenDelay = 0; this.armor = 0;
       this.downed = false; this.dead = false; this.bleedT = 0; this.selfReviveT = 0;
       this.points = 500; this.kills = 0; this.headshots = 0; this.bosses = 0; this.downs = 0; this.revives = 0; this.pointsEarned = 0;
       this.perks = [];
@@ -129,6 +129,7 @@
       if (this.sprinting) spd = SPRINT;
       if (this.crouching) spd = CROUCH;
       spd *= DW.lerp(1, 0.6, this.adsAmt);
+      if (this.perks.includes('stam')) spd *= 1.2;
       if (this.downed) spd = 1.1;
       this.airBoost = Math.max(this.airBoost - dt, 0);
       const accel = this.onFloor ? 12 : this.airBoost > 0 ? 0.6 : 3;
@@ -216,6 +217,7 @@
       if (this.downed) { hud.setInteract('', 0); return; }
       if (I.justPressed('weapon_1')) this.switchTo(0);
       if (I.justPressed('weapon_2')) this.switchTo(1);
+      if (I.justPressed('weapon_4')) this.switchTo(2);
       if (I.justPressed('weapon_3')) this.toggleWind();
       if (I.justPressed('swap')) this.cycleWeapon();
       if (I.justPressed('melee')) this.melee();
@@ -304,7 +306,10 @@
       const dir = this.forward(new THREE.Vector3());
       const w = this.world;
       const excl = new Set();
-      const mult = this.active().pap ? DW.PAP_DAMAGE : 1;
+      const mult = DW.PAP_DMG[this.active().pap | 0];
+      // Deadshot boosts headshots; a headshot while airborne is a crit (like a Minecraft jump crit)
+      const headMult = wd.head * (this.perks.includes('dead') ? 1.6 : 1);
+      const airborne = !this.onFloor;
       let dmg = wd.dmg * mult;
       let endT = 300;
       for (let k = 0; k < wd.pierce; k++) {
@@ -314,8 +319,9 @@
         const at = from.clone().addScaledVector(dir, hit.t);
         if (hit.zombie) {
           const z = hit.zombie;
-          const d = dmg * (hit.t <= wd.range ? 1 : 0.5) * (hit.head ? wd.head : 1);
-          w.localHit(z, d, hit.head, false, at);
+          const crit = hit.head && airborne;
+          const d = dmg * (hit.t <= wd.range ? 1 : 0.5) * (hit.head ? headMult : 1) * (crit ? DW.CRIT_MULT : 1);
+          w.localHit(z, d, hit.head, false, at, crit);
           excl.add(z);
           dmg *= 0.75;
           if (wd.splash > 0) { w.localSplash(at, wd.splash, wd.dmg * mult, z); break; }
@@ -391,7 +397,7 @@
         }
       }
       const entry = { id, mag: wd.mag, reserve: wd.reserve };
-      if (this.weapons.length < 2) {
+      if (this.weapons.length < this.slots()) {
         this.weapons.push(entry);
         this.switchTo(this.weapons.length - 1, true);
       } else {
@@ -402,7 +408,7 @@
     // Pack-a-Poonch the gun in hand: gem finish, more damage, full ammo
     packAPunch() {
       const w = this.active(), wd = DW.WEAPONS[w.id];
-      w.pap = true;
+      w.pap = Math.min(3, (w.pap | 0) + 1);
       w.mag = wd.mag;
       w.reserve = wd.reserve;
       this.reloading = false;
@@ -412,9 +418,15 @@
     }
 
     hasWeapon(id) { return this.weapons.some(w => w.id === id); }
+    slots() { return this.perks.includes('mule') ? 3 : 2; }
     refillAmmo() {
       for (const w of this.weapons) w.reserve = DW.WEAPONS[w.id].reserve;
-      this.grenades = 4;
+      this.grenades = Math.max(this.grenades, 4);
+    }
+    // ammo resupply station: full mags and reserves on every gun
+    refillAll() {
+      for (const w of this.weapons) { w.reserve = DW.WEAPONS[w.id].reserve; w.mag = DW.WEAPONS[w.id].mag; }
+      this.reloading = false;
     }
 
     melee() {
@@ -472,7 +484,7 @@
       const gm = this.gunModel = new THREE.Group();
       gm.scale.setScalar(0.9);
       this.gunRoot.add(gm);
-      const g = M.gun(id, false, !!this.active().pap);
+      const g = M.gun(id, false, this.active().pap | 0);
       // aim-down-sights height: the top of the gun sits just under the centre dot
       const bb = new THREE.Box3().setFromObject(g);
       this.adsY = -bb.max.y * 0.9 - 0.012;
@@ -524,6 +536,13 @@
         const lx = dx * c - dz * s, lz = dx * s + dz * c;
         this.world.hud.damageDir(Math.atan2(lx, -lz));
       }
+      // armour soaks damage first
+      if (this.armor > 0) {
+        const a = Math.min(this.armor, d);
+        this.armor -= a;
+        d -= a;
+        if (this.armor <= 0) this.world.hud.centerMsg('ARMOR BROKEN', [0.5, 0.75, 1.0], 1.2);
+      }
       this.hp -= d;
       this.regenDelay = DW.diffId < 3 ? 4.0 : 5.5;
       DW.Sfx.play('hurt', -2);
@@ -540,6 +559,9 @@
       const hadWind = this.perks.includes('wind');
       this.perks = [];
       this.maxHp = 100;
+      this.armor = 0;
+      // losing Mule Kick drops the third gun
+      if (this.weapons.length > 2) { this.weapons.length = 2; this.cur = Math.min(this.cur, 1); }
       const pd = DW.WEAPONS.pistol;
       this.downedWeapon = { id: 'pistol', mag: pd.mag, reserve: pd.mag * 3 };
       this.buildGun();
@@ -575,6 +597,7 @@
       this.downed = false;
       this.hp = 100;
       this.maxHp = 100;
+      this.armor = 0;
       this.perks = [];
       const pd = DW.WEAPONS.pistol;
       this.weapons = [{ id: 'pistol', mag: pd.mag, reserve: pd.reserve }];

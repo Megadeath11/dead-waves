@@ -65,6 +65,9 @@
       this.paused = false;
       this.relocations = 0;
       this.myGraceT = 0;
+      this.skipVotes = new Set();
+      this.skipCount = [0, 1];
+      this.mySkip = false;
       this.waveTotal = 0;
       this.remainingNet = 0;
       this.reviveIn = null; // {by, p, t} someone reviving us
@@ -237,7 +240,10 @@
       this.updateBox(dt);
       this.updateGrenades(dt);
       this.updateWinds(dt);
+      this.updateLifts(dt);
+      this.updateTurrets(dt);
       this.updateFx(dt);
+      if (DW.Input.justPressed('skip')) this.voteSkip();
       if (this.online) {
         this.pstateT -= dt;
         if (this.pstateT <= 0) { this.pstateT = PSTATE_RATE; this.sendPstate(false); }
@@ -288,7 +294,7 @@
         }
         if (this.toSpawn <= 0 && !this.bossQueue.length && this.zombies.size === 0) {
           this.state = 'intermission';
-          this.stateT = 10;
+          this.stateT = DW.INTERMISSION;
           Net.sendAll('wave_end', { n: this.wave });
           this.onWaveEnd();
         }
@@ -366,12 +372,104 @@ BOSS INCOMING
 Mystery Box open` : `WAVE ${n}
 The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
-      this.player.grenades = Math.min(this.player.grenades + 2, 4);
+      // two free grenades a round, up to 4 (never takes away ones you bought)
+      if (this.player.grenades < 4) this.player.grenades = Math.min(this.player.grenades + 2, 4);
+      this.skipVotes = new Set();
+      this.mySkip = false;
+    }
+
+    // ---------------------------------------------------------------- skip the wait between rounds
+    // Everyone presses Enter; when every player has voted the next round starts in 3 seconds.
+    voteSkip() {
+      if (this.state !== 'intermission' || this.wave === 0 || this.mySkip || this.gameOver) return;
+      this.mySkip = true;
+      Sfx.play('buy', -4, 1.3);
+      if (this.host) this.addSkipVote(Net.myId);
+      else Net.sendHost('skip', {});
+    }
+
+    addSkipVote(id) {
+      if (this.state !== 'intermission') return;
+      this.skipVotes.add(id);
+      const need = this.playerCount();
+      this.skipCount = [this.skipVotes.size, need];
+      if (this.skipVotes.size >= need && this.stateT > 3) this.stateT = 3;
+      Net.sendAll('skipv', { n: this.skipVotes.size, of: need, t: this.stateT });
+    }
+
+    // ---------------------------------------------------------------- elevators & turrets
+    useLift(i, target) {
+      this.setLift(i, target);
+      Net.sendAll('lift', { i, t: target });
+    }
+
+    setLift(i, target) {
+      const lf = this.info.lifts[i];
+      if (!lf || Math.abs(lf.target - target) < 0.01 && !lf.moving && Math.abs(lf.y - target) < 0.01) return;
+      lf.target = target;
+      lf.moving = true;
+      Sfx.play3d('door', [lf.pos[0], lf.y + 0.5, lf.pos[2]], -2, 1.4);
+    }
+
+    updateLifts(dt) {
+      for (const lf of this.info.lifts) {
+        if (!lf.moving) continue;
+        lf.y = DW.moveToward(lf.y, lf.target, dt * 1.2);
+        if (lf.y === lf.target) lf.moving = false;
+        lf.box.min[1] = lf.y - 0.2;
+        lf.box.max[1] = lf.y;
+        lf.root.position.y = lf.y;
+      }
+    }
+
+    startTurret(i, owner) {
+      const tu = this.info.turrets[i];
+      if (!tu) return;
+      tu.t = DW.TURRET_TIME;
+      tu.owner = owner;
+      Sfx.play3d('reload', tu.pos, 4, 0.7);
+      if (owner === Net.myId) this.hud.centerMsg('SENTRY ONLINE', [1.0, 0.5, 0.4], 1.5);
+    }
+
+    // The turret's owner does the damage (hits go through the normal path); everyone sees it fire.
+    updateTurrets(dt) {
+      for (const tu of this.info.turrets) {
+        const key = tu.t > 0 ? `ON ${Math.ceil(tu.t)}s` : 'off';
+        if (key !== tu.labelKey) {
+          tu.labelKey = key;
+          M.setLabel(tu.label, tu.t > 0 ? `SENTRY  ${Math.ceil(tu.t)}s` : `SENTRY TURRET  ${DW.TURRET_COST}`, tu.t > 0 ? [0.5, 1.0, 0.5] : [1.0, 0.5, 0.4]);
+        }
+        if (tu.t <= 0) continue;
+        tu.t -= dt;
+        const from = _a.set(tu.pos[0], tu.pos[1] + 1.3, tu.pos[2]); // just above its own collider
+        let best = null, bd = 28;
+        for (const z of this.zombies.values()) {
+          if (z.dead || z.riseT > 0) continue;
+          const d = Math.hypot(z.pos.x - from.x, z.pos.z - from.z);
+          if (d < bd && this.hasLine(from, _b.set(z.pos.x, z.pos.y + 1.2 * z.s, z.pos.z))) { bd = d; best = z; }
+        }
+        if (!best) continue;
+        const want = Math.atan2(-(best.pos.x - from.x), -(best.pos.z - from.z));
+        tu.yaw = DW.lerpAngle(tu.yaw, want, Math.min(1, dt * 10));
+        tu.head.rotation.y = tu.yaw;
+        tu.fireT -= dt;
+        if (tu.fireT > 0 || Math.abs(DW.angleDiff(tu.yaw, want)) > 0.25) continue;
+        tu.fireT = 0.14;
+        const head = Math.random() < 0.25;
+        const at = new THREE.Vector3(best.pos.x, best.pos.y + (head ? 1.75 : 1.15) * best.s, best.pos.z);
+        const m = tu.head.userData.muzzle;
+        this.tracer(tu.head.localToWorld(new THREE.Vector3(m[0], m[1], m[2])), at, false);
+        Sfx.play3d('shot_light', from, -6, 1.2);
+        if (tu.owner === Net.myId) this.localHit(best, 120 + 45 * this.wave, head, false, at, false, true);
+      }
     }
 
     onWaveEnd() {
       this.state = 'intermission';
-      this.stateT = 10;
+      this.stateT = DW.INTERMISSION;
+      this.skipVotes = new Set();
+      this.skipCount = [0, this.playerCount()];
+      this.mySkip = false;
       Sfx.play('wave_end');
       this.hud.centerMsg(`WAVE ${this.wave} SURVIVED`, [0.9, 0.85, 0.75], 3);
     }
@@ -549,12 +647,14 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
     }
 
-    papFx(pos) {
-      Sfx.play('pickup', 4, 0.7);
+    papFx(pos, tier = 1) {
+      const col = [null, [0.3, 1.0, 0.6], [0.35, 0.55, 1.0], [0.8, 0.4, 1.0]][tier] || [0.3, 1.0, 0.6];
+      Sfx.play('pickup', 4, 0.7 + tier * 0.1);
       Sfx.play('box_spin', -4, 1.6);
-      this.burst(new THREE.Vector3(pos[0], 1.5, pos[2]), [0.3, 1.0, 0.6], 40, 4, 0.9);
-      this.burst(new THREE.Vector3(pos[0], 1.5, pos[2]), [0.9, 1.0, 1.0], 25, 3, 0.9);
-      this.hud.centerMsg('PACK-A-POONCHED!', [0.3, 1.0, 0.6], 2.5);
+      const at = new THREE.Vector3(pos[0], pos[1] + 1.5, pos[2]);
+      this.burst(at, col, 40, 4, 0.9);
+      this.burst(at.clone(), [0.95, 1.0, 1.0], 25, 3, 0.9);
+      this.hud.centerMsg(`PACK-A-POONCHED${tier > 1 ? ' ' + 'I'.repeat(tier) : ''}!\n${DW.PAP_DMG[tier]}x damage`, col, 2.5);
     }
 
     onLocalRevive() {
@@ -641,12 +741,16 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     }
 
     // ---------------------------------------------------------------- damage (host authority)
-    localHit(z, dmg, head, knife, at) {
+    // crit: jumping headshot (already multiplied by the caller). quiet: turret hits (no hit marker / sound spam)
+    localHit(z, dmg, head, knife, at, crit = false, quiet = false) {
       if (z.dead) return;
       this.player.addPoints(10);
       z.flinch(head);
-      this.hud.hitMarker(head);
-      Sfx.play(head ? 'headshot' : 'hit', -6);
+      if (!quiet) {
+        this.hud.hitMarker(head, false, crit);
+        Sfx.play(head ? 'headshot' : 'hit', crit ? -2 : -6, crit ? 1.35 : 1);
+      }
+      if (crit) this.burst(at, [1.0, 0.85, 0.3], 14, 4, 0.4);
       this.burst(at, [0.5, 0.03, 0.02], 8, 3, 0.35);
       if (this.host) this.applyDamage(z.zid, dmg, head, Net.myId, knife);
       else Net.sendHost('hit', { z: z.zid, d: dmg, h: head, kn: knife });
@@ -813,15 +917,57 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         }
       }
       for (const pa of this.info.paps) {
-        if (Math.hypot(pa.pos[0] - pp.x, pa.pos[2] - pp.z) < 2.2) {
+        if (Math.hypot(pa.pos[0] - pp.x, pa.pos[1] - pp.y, pa.pos[2] - pp.z) < 2.3) {
           const a = p.active(), wd = DW.WEAPONS[a.id];
           if (a.id === 'wind') return { text: "The Pack-a-Poonch can't take the wind charge" };
-          if (a.pap) return { text: `Your ${wd.name} is already Pack-a-Poonched` };
+          const tier = a.pap | 0;
+          if (tier >= 3) return { text: `Your ${wd.name} is fully Pack-a-Poonched (tier III, ${DW.PAP_DMG[3]}x damage)` };
+          const cost = DW.PAP_COSTS[tier + 1];
+          const what = tier === 0 ? 'Pack-a-Poonch' : `upgrade to tier ${'I'.repeat(tier + 1)}`;
+          const look = ['', 'emerald', 'sapphire', 'amethyst & gold'][tier + 1];
           return {
-            text: `Press E to Pack-a-Poonch your ${wd.name}  [${DW.PAP_COST}]\nGem finish, ${DW.PAP_DAMAGE}x damage, full ammo`, cost: DW.PAP_COST,
-            action: () => { if (p.spend(DW.PAP_COST)) { p.packAPunch(); this.papFx(pa.pos); } },
+            text: `Press E to ${what} your ${wd.name}  [${cost}]\n${look} finish, ${DW.PAP_DMG[tier + 1]}x damage, full ammo`, cost,
+            action: () => { if (p.spend(cost)) { p.packAPunch(); this.papFx(pa.pos, tier + 1); } },
           };
         }
+      }
+      for (const ar of this.info.armors) {
+        if (Math.hypot(ar.pos[0] - pp.x, ar.pos[1] - pp.y, ar.pos[2] - pp.z) < 2.2) {
+          if (p.armor >= DW.ARMOR_MAX) return { text: `Armour full (${DW.ARMOR_MAX})` };
+          return {
+            text: `Press E to buy armour (${DW.ARMOR_MAX})  [${DW.ARMOR_COST}]\nSoaks damage before your health`, cost: DW.ARMOR_COST,
+            action: () => { if (p.spend(DW.ARMOR_COST)) { p.armor = DW.ARMOR_MAX; Sfx.play('reload', 0, 0.6); this.hud.centerMsg('ARMOR UP', [0.5, 0.75, 1.0], 1.5); } },
+          };
+        }
+      }
+      for (const am of this.info.ammos) {
+        if (Math.hypot(am.pos[0] - pp.x, am.pos[1] - pp.y, am.pos[2] - pp.z) < 2.2) {
+          return {
+            text: `Press E to refill every gun  [${DW.AMMO_COST}]`, cost: DW.AMMO_COST,
+            action: () => { if (p.spend(DW.AMMO_COST)) { p.refillAll(); Sfx.play('pickup'); this.hud.centerMsg('AMMO RESUPPLIED', [1.0, 0.85, 0.4], 1.5); } },
+          };
+        }
+      }
+      for (let i = 0; i < this.info.turrets.length; i++) {
+        const tu = this.info.turrets[i];
+        if (Math.hypot(tu.pos[0] - pp.x, tu.pos[1] - pp.y, tu.pos[2] - pp.z) < 2.2) {
+          if (tu.t > 0) return { text: `Sentry turret active: ${Math.ceil(tu.t)}s${tu.owner === Net.myId ? '' : ` (${Net.persona(tu.owner)}'s)`}` };
+          return {
+            text: `Press E to switch on the sentry turret for ${DW.TURRET_TIME}s  [${DW.TURRET_COST}]`, cost: DW.TURRET_COST,
+            action: () => { if (p.spend(DW.TURRET_COST)) { this.startTurret(i, Net.myId); Net.sendAll('turret', { i }); } },
+          };
+        }
+      }
+      for (let i = 0; i < this.info.lifts.length; i++) {
+        const lf = this.info.lifts[i];
+        const onIt = Math.abs(lf.pos[0] - pp.x) < 1.0 && Math.abs(lf.pos[2] - pp.z) < 1.0 && Math.abs(pp.y - lf.y) < 0.5;
+        const near = Math.hypot(lf.pos[0] - pp.x, lf.pos[2] - pp.z) < 2.8;
+        if (!onIt && !near) continue;
+        if (lf.moving) return { text: 'The elevator is moving...' };
+        const up = lf.y < 1;
+        if (onIt) return { text: `Press E to ride the elevator ${up ? 'up' : 'down'}`, action: () => this.useLift(i, up ? DW.Maps.DECK_H : 0) };
+        const want = pp.y > 1.2 ? DW.Maps.DECK_H : 0;
+        if (Math.abs(lf.y - want) > 0.1) return { text: 'Press E to call the elevator', action: () => this.useLift(i, want) };
       }
       for (const gb of this.info.grenadeBuys) {
         if (Math.hypot(gb.pos[0] - pp.x, gb.pos[2] - pp.z) < 2.0) {
@@ -838,7 +984,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (Math.hypot(pk.pos[0] - pp.x, pk.pos[1] - pp.y, pk.pos[2] - pp.z) < 2.0) {
           const pd = DW.PERKS[pk.perk];
           if (p.perks.includes(pk.perk)) return { text: `You already have ${pd.name}` };
-          if (p.perks.length >= 4) return { text: 'You can only hold 4 perks' };
+          if (p.perks.length >= DW.MAX_PERKS) return { text: `You can only hold ${DW.MAX_PERKS} perks` };
           return {
             text: `Press E for ${pd.name}  [${pd.cost}]\n${pd.desc}`, cost: pd.cost,
             action: () => { if (p.spend(pd.cost)) { p.addPerk(pk.perk); this.hud.centerMsg(pd.name.toUpperCase(), pd.color, 2); } },
@@ -1211,7 +1357,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const p = this.player;
       Net.sendAll('ps', {
         p: arr(p.pos), y: Math.round(p.yaw * 1000) / 1000, x: Math.round(p.pitch * 1000) / 1000, w: p.active().id,
-        dn: p.downed, dd: p.dead, f: p.firedFlag > 0.1, bt: Math.round(p.bleedT), pp: !!p.active().pap,
+        dn: p.downed, dd: p.dead, f: p.firedFlag > 0.1, bt: Math.round(p.bleedT), pp: p.active().pap | 0,
         s: p.points, k: p.kills, hs: p.headshots, d: p.downs,
       }, reliable);
     }
@@ -1284,7 +1430,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           if (Array.isArray(d.p)) { r.pos = d.p; r.target.fromArray(d.p); }
           r.yaw = +d.y || 0;
           r.pitch = +d.x || 0;
-          this.setRemoteGun(r, DW.WEAPONS[d.w] ? d.w : 'pistol', !!d.pp);
+          this.setRemoteGun(r, DW.WEAPONS[d.w] ? d.w : 'pistol', DW.clamp(d.pp | 0, 0, 3));
           r.bleedT = +d.bt || 0;
           const wasDown = r.down;
           r.down = !!d.dn;
@@ -1311,6 +1457,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
             this.windBlast(wp, false);
             this.player.windKnock(wp);
           }
+          break;
+        case 'lift': this.setLift(d.i | 0, +d.t || 0); break;
+        case 'turret': this.startTurret(d.i | 0, sender); break;
+        case 'skip': if (this.host) this.addSkipVote(sender); break;
+        case 'skipv':
+          this.skipCount = [d.n | 0, d.of | 0];
+          if (!this.host && +d.t <= 3) this.stateT = Math.min(this.stateT, +d.t);
           break;
         case 'rv':
           if (d.t === Net.myId) this.reviveIn = { by: sender, p: +d.p || 0, t: this.elapsed };

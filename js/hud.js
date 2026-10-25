@@ -22,7 +22,7 @@
         <div class="putimers"></div>
         <div class="revivein"><div class="rtext"></div><div class="ibar"><div class="fill"></div></div></div>
         <div class="bosses"></div>
-        <div class="bl"><div class="team"></div><div class="perks"></div><div class="hp"><div class="hp-fill"></div><div class="hp-text"></div></div><div class="points">500</div><div class="popups"></div></div>
+        <div class="bl"><div class="team"></div><div class="perks"></div><div class="armor"><div class="armor-fill"></div><div class="armor-text"></div></div><div class="hp"><div class="hp-fill"></div><div class="hp-text"></div></div><div class="points">500</div><div class="popups"></div></div>
         <div class="br"><div class="weapon"></div><div class="ammo"></div><div class="nades"></div></div>
         <div class="interact"><div class="itext"></div><div class="ibar"><div class="fill"></div></div></div>
         <div class="centermsg"></div>
@@ -34,6 +34,10 @@
       this.dmgDir = q('.dmgdir'); this.ammoHint = q('.ammo-hint'); this.waveL = q('.wave'); this.puL = q('.pu');
       this.bossBox = q('.bosses'); this.bossRows = [];
       this.hpFill = q('.hp-fill'); this.hpText = q('.hp-text');
+      this.armorBox = q('.armor'); this.armorFill = q('.armor-fill'); this.armorText = q('.armor-text');
+      this.critL = UI.el('div', 'crit', 'CRIT!');
+      this.el.appendChild(this.critL);
+      this.critT = 0;
       this.team = q('.team'); this.perksBox = q('.perks'); this.pointsL = q('.points'); this.popups = q('.popups');
       this.weaponL = q('.weapon'); this.ammoL = q('.ammo'); this.nadeL = q('.nades');
       this.interactL = q('.itext'); this.interactBar = q('.ibar'); this.interactFill = q('.ibar .fill');
@@ -78,7 +82,11 @@
         this.waveL.classList.add('flash');
       }
       const pu = [];
-      if (w.state === 'intermission' && w.wave > 0 && !w.gameOver) pu.push(`Next wave in ${Math.ceil(Math.max(w.stateT, 0))}`);
+      if (w.state === 'intermission' && w.wave > 0 && !w.gameOver) {
+        pu.push(`Next wave in ${Math.ceil(Math.max(w.stateT, 0))}`);
+        const [n, of] = w.skipCount || [0, 1];
+        if (w.stateT > 3) pu.push(w.mySkip ? `Skip vote sent (${n}/${of})` : `Press ENTER to skip${of > 1 ? ` (${n}/${of} ready)` : ''}`);
+      }
       this.set(this.puL, 'pu', pu.join('\n'));
 
       this.set(this.pointsL, 'pts', String(p.points));
@@ -87,8 +95,10 @@
       this.updateMarkers();
       this.updateReviveIn();
       const a = p.active(), wd = DW.WEAPONS[a.id];
-      this.set(this.weaponL, 'wep', (a.pap ? '\u25C6 ' + wd.name + ' \u25C6  POONCHED' : wd.name) + (p.reloading ? '   [RELOADING]' : ''));
-      this.weaponL.style.color = a.pap ? 'rgb(90, 255, 170)' : '';
+      const tier = a.pap | 0;
+      const gem = '\u25C6'.repeat(tier);
+      this.set(this.weaponL, 'wep', (tier ? `${gem} ${wd.name} ${gem}  ${DW.PAP_NAMES[tier]}` : wd.name) + (p.reloading ? '   [RELOADING]' : ''));
+      this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
       this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(wd.mag / 4) ? RED : BONE);
       this.set(this.nadeL, 'nade', `Grenades: ${p.grenades}    [G]      Wind: ${p.wind.mag}/${DW.WIND_CHARGES}    [3]`);
@@ -112,7 +122,7 @@
         this.perksBox.innerHTML = '';
         for (const perk of p.perks) {
           const pd = DW.PERKS[perk];
-          const b = UI.el('div', 'perk', pd.name[0]);
+          const b = UI.el('div', 'perk', pd.icon || pd.name[0]);
           b.style.background = UI.rgb(pd.color);
           b.title = pd.name;
           this.perksBox.appendChild(b);
@@ -135,6 +145,13 @@
       this.hpFill.style.width = (hpf * 100).toFixed(1) + '%';
       this.hpFill.style.background = p.downed ? 'rgb(120,20,15)' : hpf > 0.6 ? 'rgb(90,200,90)' : hpf > 0.3 ? 'rgb(230,180,50)' : 'rgb(220,40,30)';
       this.set(this.hpText, 'hp', p.downed ? 'DOWN' : p.dead ? '' : `${Math.ceil(p.hp)} / ${p.maxHp}`);
+      this.armorBox.style.display = p.armor > 0 ? 'block' : 'none';
+      if (p.armor > 0) {
+        this.armorFill.style.width = (p.armor / DW.ARMOR_MAX * 100).toFixed(1) + '%';
+        this.set(this.armorText, 'ar', `ARMOR ${Math.ceil(p.armor)}`);
+      }
+      this.critT = Math.max(this.critT - dt * 2.5, 0);
+      this.critL.style.opacity = this.critT.toFixed(2);
 
       // one bar per boss alive
       const bosses = w.bosses();
@@ -273,9 +290,10 @@
       this.centerL.style.opacity = '1';
       this.centerT = dur;
     }
-    hitMarker(head, kill = false) {
+    hitMarker(head, kill = false, crit = false) {
       this.hitT = 1;
-      this.hitmark.style.color = UI.rgb(kill ? RED : head ? GOLD : [1, 1, 1]);
+      this.hitmark.style.color = UI.rgb(kill ? RED : crit ? [1.0, 0.55, 0.1] : head ? GOLD : [1, 1, 1]);
+      if (crit) this.critT = 1;
     }
     flashDamage(d) { this.dmgAlpha = DW.clamp(this.dmgAlpha + d / 60, 0, 1); }
     flashPoints() { this.pointsFlash = 1; }

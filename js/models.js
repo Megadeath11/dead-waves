@@ -655,7 +655,7 @@
         break;
     }
     g.userData.muzzle = muzzle;
-    if (pap) M.papify(g);
+    if (pap) M.papify(g, pap === true ? 1 : pap);
     return g;
   };
 
@@ -684,29 +684,39 @@
     _papEnv.needsUpdate = true;
     return _papEnv;
   }
-  let _papMats = null;
-  M.papMats = () => {
-    if (_papMats) return _papMats;
+  // gem sets per Pack-a-Poonch tier: I emerald + diamond, II sapphire + diamond, III amethyst + gold
+  const PAP_GEMS = [
+    null,
+    [[0.05, 0.85, 0.45], [0.85, 1.0, 1.0], [0.1, 0.6, 0.35]],
+    [[0.1, 0.35, 1.0], [0.85, 0.95, 1.0], [0.15, 0.2, 0.7]],
+    [[0.7, 0.2, 1.0], [1.0, 0.8, 0.25], [0.45, 0.1, 0.75]],
+  ];
+  const _papMats = {};
+  M.papMats = (tier = 1) => {
+    tier = DW.clamp(tier | 0, 1, 3);
+    if (_papMats[tier]) return _papMats[tier];
     const env = papEnv();
-    _papMats = [
-      new T.MeshStandardMaterial({ color: M.color([0.05, 0.85, 0.45]), emissive: M.color([0.0, 0.55, 0.3]), emissiveIntensity: 0.6, metalness: 0.9, roughness: 0.12, envMap: env, envMapIntensity: 1.6 }), // emerald
-      new T.MeshStandardMaterial({ color: M.color([0.85, 1.0, 1.0]), emissive: M.color([0.4, 0.8, 0.85]), emissiveIntensity: 0.4, metalness: 0.95, roughness: 0.05, envMap: env, envMapIntensity: 2.0 }), // diamond
-      new T.MeshStandardMaterial({ color: M.color([0.1, 0.6, 0.35]), emissive: M.color([0.05, 0.4, 0.25]), emissiveIntensity: 0.5, metalness: 0.9, roughness: 0.2, envMap: env, envMapIntensity: 1.3 }), // dark emerald
-    ];
-    return _papMats;
+    const glow = 0.5 + tier * 0.15;
+    _papMats[tier] = PAP_GEMS[tier].map((c, i) => new T.MeshStandardMaterial({
+      color: M.color(c), emissive: M.color(c.map(v => v * (i === 1 ? 0.6 : 0.65))), emissiveIntensity: glow,
+      metalness: 0.92, roughness: i === 1 ? 0.05 : 0.14, envMap: env, envMapIntensity: i === 1 ? 2.0 : 1.5,
+    }));
+    return _papMats[tier];
   };
-  // Swap every part of a gun to the gem finish (alternating emerald / diamond).
-  M.papify = g => {
-    const mats = M.papMats();
+  // Swap every part of a gun to the gem finish for its tier.
+  M.papify = (g, tier = 1) => {
+    const mats = M.papMats(tier);
     let i = 0;
     g.traverse(o => { if (o.isMesh) { o.material = mats[i % mats.length]; o.userData.noBake = true; i++; } });
   };
-  // shimmer: called every frame by the world
+  // shimmer: called every frame by the world (higher tiers pulse harder)
   M.tickPap = t => {
-    if (!_papMats) return;
-    _papMats[0].emissiveIntensity = 0.45 + 0.35 * Math.sin(t * 3.1);
-    _papMats[1].emissiveIntensity = 0.3 + 0.35 * Math.sin(t * 4.3 + 1.7);
-    _papMats[2].emissiveIntensity = 0.35 + 0.3 * Math.sin(t * 2.4 + 3.1);
+    for (const tier in _papMats) {
+      const m = _papMats[tier], k = 0.25 + tier * 0.12;
+      m[0].emissiveIntensity = 0.45 + k * Math.sin(t * (2.6 + tier * 0.5));
+      m[1].emissiveIntensity = 0.3 + k * Math.sin(t * 4.3 + 1.7);
+      m[2].emissiveIntensity = 0.35 + k * Math.sin(t * 2.4 + 3.1);
+    }
   };
 
   // The Pack-a-Poonch: an old desk with a humming gem machine on top. Faces -Z.
@@ -730,6 +740,74 @@
       const c = M.cyl(root, [x, y, z], 0.0, 0.07, h, gems[i % 3], 5);
       c.userData.noBake = true;
     });
+    return root;
+  };
+
+  // ---------------------------------------------------------------- stations (late-game spending)
+
+  // Armour locker: a tall steel cabinet with a vest hanging in the open door. Faces -Z.
+  M.armorLocker = parent => {
+    const root = M.joint(parent, [0, 0, 0]);
+    const steel = M.mat([0.32, 0.36, 0.4], 0, 0.6, 0.45);
+    const dark = M.mat([0.12, 0.13, 0.15], 0, 0.5, 0.5);
+    const vest = M.mat([0.2, 0.28, 0.42]);
+    M.box(root, [0, 1.0, 0.1], [1.0, 2.0, 0.6], steel);
+    M.box(root, [0, 1.0, -0.21], [0.86, 1.8, 0.02], dark);
+    M.box(root, [-0.62, 1.0, -0.3], [0.04, 1.8, 0.5], steel, [0, 0.9, 0]);    // open door
+    M.box(root, [0, 1.25, -0.16], [0.6, 0.7, 0.14], vest);
+    for (const y of [1.05, 1.25, 1.45]) M.box(root, [0, y, -0.235], [0.5, 0.06, 0.01], M.mat([0.12, 0.18, 0.3]));
+    M.box(root, [0, 1.65, -0.17], [0.3, 0.08, 0.1], vest);
+    M.box(root, [0, 2.04, 0.1], [1.04, 0.08, 0.64], dark);
+    M.box(root, [0, 1.88, -0.215], [0.5, 0.1, 0.01], M.mat([0.3, 0.6, 1.0], 2.0));
+    return root;
+  };
+
+  // Ammo resupply: a stack of green ammo cans on a pallet. Faces -Z.
+  M.ammoCrate = parent => {
+    const root = M.joint(parent, [0, 0, 0]);
+    const wood = M.mat([0.4, 0.3, 0.17]);
+    const can = M.mat([0.24, 0.32, 0.18], 0, 0.3, 0.6);
+    const latch = M.mat([0.6, 0.55, 0.3], 0, 0.7, 0.4);
+    M.box(root, [0, 0.06, 0], [1.4, 0.12, 0.9], wood);
+    for (const x of [-0.42, 0, 0.42]) for (const z of [-0.2, 0.2]) {
+      M.box(root, [x, 0.32, z], [0.36, 0.4, 0.34], can);
+      M.box(root, [x, 0.53, z], [0.16, 0.03, 0.06], latch);
+    }
+    for (const x of [-0.21, 0.21]) M.box(root, [x, 0.72, 0], [0.36, 0.4, 0.34], can);
+    M.box(root, [0, 0.95, -0.18], [0.5, 0.12, 0.01], M.mat([1.0, 0.85, 0.3], 2.0));
+    return root;
+  };
+
+  // Sentry turret: tripod base plus a head (returned) that turns and fires. head faces -Z, muzzle at head.userData.muzzle.
+  M.turret = parent => {
+    const root = M.joint(parent, [0, 0, 0]);
+    const metal = M.mat([0.25, 0.27, 0.29], 0, 0.6, 0.4);
+    const dark = M.mat([0.1, 0.1, 0.11], 0, 0.5, 0.5);
+    M.cyl(root, [0, 0.03, 0], 0.7, 0.75, 0.06, M.mat([0.6, 0.5, 0.1]), 8);   // yellow pad
+    for (let k = 0; k < 3; k++) {
+      const a = k * Math.PI * 2 / 3;
+      M.box(root, [Math.cos(a) * 0.28, 0.35, Math.sin(a) * 0.28], [0.06, 0.75, 0.06], metal, [Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4]);
+    }
+    M.cyl(root, [0, 0.75, 0], 0.12, 0.16, 0.2, metal, 8);
+    const head = M.joint(root, [0, 0.95, 0]);
+    M.box(head, [0, 0, 0.02], [0.36, 0.26, 0.42], metal);
+    M.box(head, [0, 0.16, 0.05], [0.24, 0.06, 0.3], dark);
+    for (const x of [-0.07, 0.07]) M.cyl(head, [x, 0, -0.38], 0.03, 0.03, 0.5, dark, 6, [Math.PI / 2, 0, 0]);
+    M.box(head, [0, 0.04, -0.215], [0.18, 0.05, 0.01], M.mat([1.0, 0.25, 0.15], 3.0));
+    head.userData.muzzle = [0, 0, -0.65];
+    return head;
+  };
+
+  // Elevator platform (moves) - 1.9 m square with hazard stripes.
+  M.liftPlatform = parent => {
+    const root = M.joint(parent, [0, 0, 0]);
+    M.box(root, [0, -0.1, 0], [1.9, 0.2, 1.9], M.mat([0.3, 0.31, 0.33], 0, 0.6, 0.5));
+    const y = M.mat([0.95, 0.75, 0.1]), k = M.mat([0.08, 0.08, 0.08]);
+    for (let i = 0; i < 8; i++) {
+      M.box(root, [-0.84 + i * 0.24, 0.005, -0.92], [0.12, 0.01, 0.06], i % 2 ? k : y);
+      M.box(root, [-0.84 + i * 0.24, 0.005, 0.92], [0.12, 0.01, 0.06], i % 2 ? k : y);
+    }
+    M.box(root, [0, 0.01, 0], [0.6, 0.01, 0.6], M.mat([0.95, 0.75, 0.1], 0.6));
     return root;
   };
 

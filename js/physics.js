@@ -45,7 +45,7 @@
     // Moves a character. p: THREE.Vector3 feet position, v: velocity (y used for gravity, caller sets it).
     // Returns true when standing on something.
     move(p, v, r, height, dt) {
-      const step = 0.3;
+      const step = 0.33; // a 0.3 m stair riser plus a little room for rounding
       const steps = Math.max(1, Math.ceil(Math.hypot(v.x, v.z) * dt / (r * 0.5)));
       const sdt = dt / steps;
       for (let s = 0; s < steps; s++) {
@@ -185,6 +185,7 @@
       this.w = Math.ceil((phys.maxX - phys.minX) / RES);
       this.h = Math.ceil((phys.maxZ - phys.minZ) / RES);
       this.blocked = new Uint8Array(this.w * this.h);
+      this.height = new Float32Array(this.w * this.h); // floor height of each cell (ground, stair step or deck top)
       this.dist = new Float64Array(this.w * this.h).fill(Infinity);
       this.heap = new Int32Array(this.w * this.h * 8);
       this.rebuild();
@@ -193,21 +194,55 @@
       return [DW.clamp(Math.floor((x - this.ox) / RES), 0, this.w - 1), DW.clamp(Math.floor((z - this.oz) / RES), 0, this.h - 1)];
     }
     center(i, j) { return [this.ox + (i + 0.5) * RES, this.oz + (j + 0.5) * RES]; }
+    // Each cell gets one floor height (the highest walkable surface over it: floor, stair step, deck).
+    // It is blocked when anything sits between knee and head height above that floor. Elevators are
+    // player-only, so their cells are blocked for zombies.
     rebuild() {
-      const R = 0.45;
+      const R = 0.45, W = this.w;
+      const walkTags = { floor: 1, stair: 1, deck: 1 };
       this.blocked.fill(0);
+      this.height.fill(-1000);
       for (const b of this.phys.boxes) {
-        if (!b.active || b.max[1] < 0.3 || b.min[1] > 1.6) continue;
+        if (!b.active || !walkTags[b.tag]) continue;
+        const [i0, j0] = this.cellOf(b.min[0], b.min[2]);
+        const [i1, j1] = this.cellOf(b.max[0], b.max[2]);
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const [cx, cz] = this.center(i, j);
+          if (cx < b.min[0] || cx > b.max[0] || cz < b.min[2] || cz > b.max[2]) continue;
+          if (b.max[1] > this.height[j * W + i]) this.height[j * W + i] = b.max[1];
+        }
+      }
+      for (let k = 0; k < this.height.length; k++) if (this.height[k] < -999) this.blocked[k] = 1;
+      for (const b of this.phys.boxes) {
+        if (!b.active) continue;
+        const lift = b.tag === 'lift';
         const [i0, j0] = this.cellOf(b.min[0] - R, b.min[2] - R);
         const [i1, j1] = this.cellOf(b.max[0] + R, b.max[2] + R);
         for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const k = j * W + i;
+          if (this.blocked[k]) continue;
           const [cx, cz] = this.center(i, j);
+          if (lift) {
+            if (cx >= b.min[0] && cx <= b.max[0] && cz >= b.min[2] && cz <= b.max[2]) this.blocked[k] = 1;
+            continue;
+          }
+          const hgt = this.height[k];
+          if (b.max[1] <= hgt + 0.35 || b.min[1] >= hgt + 1.6) continue;
           const qx = DW.clamp(cx, b.min[0], b.max[0]), qz = DW.clamp(cz, b.min[2], b.max[2]);
-          if ((qx - cx) ** 2 + (qz - cz) ** 2 < R * R) this.blocked[j * this.w + i] = 1;
+          if ((qx - cx) ** 2 + (qz - cz) ** 2 < R * R) this.blocked[k] = 1;
         }
       }
     }
     walkable(i, j) { return i >= 0 && j >= 0 && i < this.w && j < this.h && !this.blocked[j * this.w + i]; }
+    // can a zombie step between two neighbouring cells? (both open, floor heights within one stair riser)
+    link(i, j, ni, nj) {
+      if (!this.walkable(ni, nj)) return false;
+      return Math.abs(this.height[j * this.w + i] - this.height[nj * this.w + ni]) <= 0.35;
+    }
+    heightAt(x, z) {
+      const [i, j] = this.cellOf(x, z);
+      return this.height[j * this.w + i];
+    }
     nearestWalkable(i, j) {
       if (this.walkable(i, j)) return [i, j];
       for (let r = 1; r < 8; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
@@ -266,8 +301,8 @@
           const ni = i + di, nj = j + dj;
           if (ni < 0 || nj < 0 || ni >= w || nj >= h) continue;
           const nIdx = nj * w + ni;
-          if (blocked[nIdx]) continue;
-          if (di && dj && (blocked[j * w + ni] || blocked[nj * w + i])) continue;
+          if (blocked[nIdx] || !this.link(i, j, ni, nj)) continue;
+          if (di && dj && (!this.link(i, j, ni, j) || !this.link(i, j, i, nj))) continue;
           const nd = d + (di && dj ? D : 1);
           if (nd < dist[nIdx]) {
             dist[nIdx] = nd;
@@ -280,14 +315,20 @@
       const [i, j] = this.nearestWalkable(...this.cellOf(x, z));
       return this.dist[j * this.w + i];
     }
-    // Straight walkable line between two cells (samples every quarter cell).
+    // Straight walkable line between two points (samples every quarter cell, no drops or climbs
+    // bigger than a stair riser along the way).
     lineClear(x0, z0, x1, z1) {
       const len = Math.hypot(x1 - x0, z1 - z0);
       const n = Math.ceil(len / (RES * 0.5));
+      let [pi, pj] = this.cellOf(x0, z0);
       for (let k = 1; k <= n; k++) {
         const t = k / n;
         const [i, j] = this.cellOf(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t);
         if (this.blocked[j * this.w + i]) return false;
+        if (i !== pi || j !== pj) {
+          if (Math.abs(this.height[j * this.w + i] - this.height[pj * this.w + pi]) > 0.35) return false;
+          pi = i; pj = j;
+        }
       }
       return true;
     }
@@ -307,8 +348,8 @@
         for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
           if (!di && !dj) continue;
           const ni = ci + di, nj = cj + dj;
-          if (!this.walkable(ni, nj)) continue;
-          if (di && dj && (!this.walkable(ci + di, cj) || !this.walkable(ci, cj + dj))) continue;
+          if (!this.link(ci, cj, ni, nj)) continue;
+          if (di && dj && (!this.link(ci, cj, ci + di, cj) || !this.link(ci, cj, ci, cj + dj))) continue;
           const d = this.dist[nj * this.w + ni];
           if (d < bd) { bd = d; bi = ni; bj = nj; }
         }

@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.3';
+DW.VERSION = '2.4';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -13,7 +13,7 @@ DW.DIFFS = [
   { name: 'Veteran', hp: 1.8, dmg: 2.2, spd: 1.2, pts: 0.9, boss_every: 4, desc: 'Brutal. Bosses every 4 waves.' },
 ];
 
-DW.MAP_ORDER = ['outpost', 'bunker', 'factory'];
+DW.MAP_ORDER = ['outpost', 'bunker', 'factory', 'harbor', 'overpass'];
 
 // range in metres (damage halves past it). Every shot goes exactly where the crosshair points (no spread).
 DW.WEAPONS = {
@@ -48,8 +48,19 @@ DW.WIND_RECHARGE = 3.0; // seconds per charge
 
 DW.BOX_POOL = ['lmg', 'deagle', 'sniper', 'plasma', 'minigun', 'ak', 'mp5', 'shotgun', 'm14'];
 DW.BOX_COST = 1950;
-DW.PAP_COST = 20000;      // Pack-a-Poonch: gem finish + 4x damage
-DW.PAP_DAMAGE = 4;
+// Pack-a-Poonch tiers: cost to reach tier 1/2/3 and the damage multiplier at each tier
+DW.PAP_COSTS = [0, 20000, 40000, 60000];
+DW.PAP_DMG = [1, 4, 6, 9];
+DW.PAP_NAMES = ['', 'POONCHED', 'POONCHED II', 'POONCHED III'];
+DW.PAP_COST = DW.PAP_COSTS[1];
+// late-game stations
+DW.ARMOR_COST = 4000;     // armour locker: soaks this much damage before health
+DW.ARMOR_MAX = 150;
+DW.AMMO_COST = 5000;      // ammo resupply: refills every gun you carry
+DW.TURRET_COST = 8000;    // sentry turret pad: guards the spot for TURRET_TIME seconds
+DW.TURRET_TIME = 60;
+DW.INTERMISSION = 30;     // seconds between rounds (everyone can vote to skip with Enter)
+DW.CRIT_MULT = 2;         // headshots while airborne
 DW.GRENADE_COST = 150;    // per grenade at the grenade wall-buy
 DW.MAX_GRENADES = 10;
 DW.BOX_UNLOCK_WAVE = 5; // the box stays shut until this wave, so you work through the wall guns first
@@ -57,12 +68,16 @@ DW.BOX_UNLOCK_WAVE = 5; // the box stays shut until this wave, so you work throu
 DW.BOX_WEIGHT = { m14: 6, shotgun: 6, mp5: 6, ak: 5, deagle: 4, lmg: 3, sniper: 2, plasma: 1.5, minigun: 1 };
 
 DW.PERKS = {
-  iron: { name: 'Iron Hide', cost: 2500, color: [0.9, 0.15, 0.15], desc: 'Max health 250' },
-  fast: { name: 'Fast Hands', cost: 3000, color: [0.25, 0.85, 0.3], desc: 'Reload 50% faster' },
-  tap: { name: 'Double Tap', cost: 2000, color: [0.95, 0.75, 0.1], desc: 'Fire rate +33%' },
-  wind: { name: 'Second Wind', cost: 1500, color: [0.2, 0.55, 1.0], desc: 'Solo: self-revive once. Co-op: revive twice as fast' },
+  iron: { name: 'Iron Hide', icon: 'IH', cost: 2500, color: [0.9, 0.15, 0.15], desc: 'Max health 250' },
+  fast: { name: 'Fast Hands', icon: 'FH', cost: 3000, color: [0.25, 0.85, 0.3], desc: 'Reload 50% faster' },
+  tap: { name: 'Double Tap', icon: 'DT', cost: 2000, color: [0.95, 0.75, 0.1], desc: 'Fire rate +33%' },
+  wind: { name: 'Second Wind', icon: 'SW', cost: 1500, color: [0.2, 0.55, 1.0], desc: 'Solo: self-revive once. Co-op: revive twice as fast' },
+  mule: { name: 'Mule Kick', icon: 'MK', cost: 4000, color: [0.15, 0.6, 0.25], desc: 'Carry a third gun (key 4)' },
+  dead: { name: 'Deadshot', icon: 'DS', cost: 3500, color: [0.55, 0.55, 0.6], desc: 'Headshots do 60% more damage' },
+  stam: { name: 'Stamin-Up', icon: 'SU', cost: 2500, color: [1.0, 0.55, 0.1], desc: 'Move 20% faster' },
 };
-DW.PERK_ORDER = ['iron', 'fast', 'tap', 'wind'];
+DW.PERK_ORDER = ['iron', 'fast', 'tap', 'wind', 'mule', 'dead', 'stam'];
+DW.MAX_PERKS = 7;
 DW.ZTYPES = ['walker', 'runner', 'brute', 'spitter', 'goonlord'];
 DW.GOON_WAVE = 20;   // the Goon Lord rises on this wave, then every 10 waves
 DW.BOSS_NAMES = { brute: 'BRUTE', spitter: 'ABOMINATION', goonlord: 'GOON LORD - THE WENDYGOON' };
