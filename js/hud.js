@@ -4,6 +4,8 @@
   const UI = DW.UI;
   const RED = [0.85, 0.12, 0.1], GOLD = [1.0, 0.82, 0.3], BONE = [0.93, 0.9, 0.82], DIM = [0.62, 0.6, 0.56];
 
+  const SHORT = { pistol: 'M9', m14: 'M14', shotgun: 'SHOTGUN', mp5: 'MP5', ak: 'AK-47', lmg: 'RPK', deagle: 'HAWK', sniper: 'BARRETT', plasma: 'PLASMA', minigun: 'DEATH M.' };
+
   class Hud {
     constructor(world) {
       this.world = world;
@@ -22,6 +24,7 @@
         <div class="markers"></div>
         <div class="tl"><div class="wave"></div><div class="zcount"></div><div class="pu"></div></div>
         <div class="putimers"></div>
+        <div class="hotbar"></div>
         <div class="revivein"><div class="rtext"></div><div class="ibar"><div class="fill"></div></div></div>
         <div class="bleed"><div class="btext"></div><div class="bbar"><div class="bfill"></div></div></div>
         <div class="bosses"></div>
@@ -50,6 +53,7 @@
       this.zcount = q('.zcount'); this.puTimers = q('.putimers'); this.markersEl = q('.markers');
       this.bleedEl = q('.bleed'); this.bleedText = q('.bleed .btext'); this.bleedFill = q('.bleed .bfill');
       this.reviveIn = q('.revivein'); this.reviveInText = q('.revivein .rtext'); this.reviveInFill = q('.revivein .fill');
+      this.hotbarEl = q('.hotbar'); this.hotKey = '';
       this.puBoxes = {};
       this.markerPool = [];
       this.pausePanel = null;
@@ -111,8 +115,8 @@
       this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
       this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(DW.magOf(a) / 4) ? RED : BONE);
-      const K = DW.Input.keyName;
-      this.set(this.nadeL, 'nade', `Grenades: ${p.grenades} [${K('grenade')}]    Wind: ${p.wind.mag}/${DW.WIND_CHARGES} [${K('weapon_3')}]    Sentries: ${w.mySentries()}/${DW.SENTRY_MAX} [${K('sentry')}] ${DW.SENTRY_COST}`);
+      this.set(this.nadeL, 'nade', '');
+      this.updateHotbar();
       const lowMag = a.mag <= Math.max(1, Math.floor(DW.magOf(a) / 4));
       let hint = '';
       if (p.dead || p.reloading || a.id === 'wind') hint = '';
@@ -232,6 +236,30 @@
         b.fill.style.width = (DW.clamp(it.t / 30, 0, 1) * 100).toFixed(1) + '%';
         b.el.classList.toggle('ending', it.t < 5);
       }
+    }
+
+    // Hotbar along the bottom: every gun, the wind charge, grapple, defib, grenades and sentries,
+    // with their keys; the item in hand is highlighted, gear you don't own yet is dimmed.
+    updateHotbar() {
+      const w = this.world, p = w.player, K = DW.Input.keyName;
+      const slots = [];
+      const keys = ['weapon_1', 'weapon_2', 'weapon_4'];
+      p.weapons.forEach((g, i) => {
+        const pap = g.pap > 0 ? ' ' + 'I'.repeat(g.pap) : '';
+        slots.push({ key: K(keys[i]), name: SHORT[g.id] || DW.WEAPONS[g.id].name, sub: `${g.mag}/${g.reserve}`, on: !p.windOut && !p.downed && p.cur === i, pap });
+      });
+      slots.push({ key: K('weapon_3'), name: 'WIND', sub: `${p.wind.mag}/${DW.WIND_CHARGES}`, on: p.windOut && !p.downed, low: p.wind.mag === 0 });
+      const gcd = p.grappleCd > 0 ? Math.ceil(p.grappleCd) + 's' : 'READY';
+      slots.push({ key: K('grapple'), name: 'GRAPPLE', sub: p.grapple ? gcd : DW.GEAR.grapple.cost, off: !p.grapple, low: p.grapple && p.grappleCd > 0 });
+      slots.push({ key: '', name: 'DEFIB', sub: p.defib ? '1s revive' : DW.GEAR.defib.cost, off: !p.defib });
+      slots.push({ key: K('grenade'), name: 'GRENADE', sub: 'x' + p.grenades, low: p.grenades === 0 });
+      slots.push({ key: K('sentry'), name: 'SENTRY', sub: `${w.mySentries()}/${DW.SENTRY_MAX}` });
+      const sig = slots.map(o => [o.key, o.name, o.sub, o.on, o.off, o.low, o.pap].join(',')).join('|');
+      if (sig === this.hotKey) return;
+      this.hotKey = sig;
+      this.hotbarEl.innerHTML = slots.map(o =>
+        `<div class="hslot${o.on ? ' on' : ''}${o.off ? ' off' : ''}${o.low ? ' low' : ''}${o.pap ? ' pap' : ''}">` +
+        `<span class="hkey">${UI.esc(o.key)}</span><div class="hname">${UI.esc(o.name)}${o.pap ? `<b>${o.pap}</b>` : ''}</div><div class="hsub">${UI.esc(o.sub)}</div></div>`).join('');
     }
 
     // screen markers: downed teammates (with revive state) and the last zombie, shown through walls

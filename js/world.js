@@ -1024,11 +1024,40 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       else if (type === 'double') this.doubleT = 30;
       else if (type === 'insta') this.instaT = 30;
       else if (type === 'nuke') {
-        this.player.addPoints(400, true);
         Sfx.play('explode', 4);
         this.hud.flashDamage(0);
-        if (this.host) for (const [zid, z] of [...this.zombies]) if (!z.isBoss()) this.killZombie(zid, '', false, false, true);
+        // the host kills everything and pays 100 per zombie, split evenly between everyone in the game
+        if (this.host) {
+          let n = 0;
+          for (const [zid, z] of [...this.zombies]) if (!z.isBoss()) { this.killZombie(zid, '', false, false, true); n++; }
+          const share = Math.round(n * DW.NUKE_PER_KILL / Math.max(1, this.playerCount()));
+          Net.sendAll('nukepay', { n, s: share });
+          this.onNukePay({ n, s: share });
+        }
       }
+    }
+
+    // grapple line, fading out over a third of a second (mine are sent so teammates see them too)
+    rope(a, b, mine) {
+      const g = new THREE.BufferGeometry().setFromPoints([a.clone(), b.clone()]);
+      const m = new THREE.LineBasicMaterial({ color: 0xd8e8ff, transparent: true, opacity: 1, fog: false });
+      const line = new THREE.Line(g, m);
+      this.scene.add(line);
+      let t = 0;
+      this.fx.push(dt => {
+        t += dt;
+        m.opacity = Math.max(0, 1 - t / 0.35);
+        if (t < 0.35) return true;
+        this.scene.remove(line); g.dispose(); m.dispose();
+        return false;
+      });
+      if (mine) Net.sendAll('rope', { a: [a.x, a.y, a.z].map(v => Math.round(v * 100) / 100), b: [b.x, b.y, b.z].map(v => Math.round(v * 100) / 100) }, false);
+    }
+
+    onNukePay(d) {
+      const share = +d.s || 0;
+      if (share > 0) this.player.addPoints(share);
+      this.hud.centerMsg(`NUKE\n${d.n | 0} killed  +${share} each`, PU_INFO.nuke.color, 2.5);
     }
 
     // ---------------------------------------------------------------- interactions
@@ -1038,7 +1067,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const pp = p.pos;
       for (const [id, r] of this.remotes) {
         if (r.down && !r.dead && r.posV.distanceTo(pp) < 2.3) {
-          const t = p.perks.includes('wind') ? 1.5 : 3.0;
+          const t = p.defib ? 1.0 : p.perks.includes('wind') ? 1.5 : 3.0;
           return { text: `Hold E to revive ${r.name}`, hold: t, revive: id, action: () => this.reviveRemote(id) };
         }
       }
@@ -1057,6 +1086,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
             return { text: `Press E for ${wd.name} ammo  [${c2}]`, cost: c2, action: () => { if (p.spend(c2)) p.giveWeapon(wb.weapon); } };
           }
           return { text: `Press E to buy ${wd.name}  [${wd.cost}]`, cost: wd.cost, action: () => { if (p.spend(wd.cost)) p.giveWeapon(wb.weapon); } };
+        }
+      }
+      for (const gb of this.info.gear) {
+        if (Math.hypot(gb.pos[0] - pp.x, gb.pos[1] - pp.y, gb.pos[2] - pp.z) < 2.0) {
+          const gd = DW.GEAR[gb.item];
+          if (p[gb.item]) return { text: `You have the ${gd.name}` };
+          return { text: `Press E to buy the ${gd.name}  [${gd.cost}]\n${gd.desc}`, cost: gd.cost, action: () => { if (p.spend(gd.cost)) p.giveGear(gb.item); } };
         }
       }
       for (const bx of this.info.boxes) {
@@ -1651,6 +1687,12 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         case 'wave_end': if (!this.host) this.onWaveEnd(); break;
         case 'aoe': if (!this.host) this.showAoe(d.p, +d.r, +d.t, String(d.k)); break;
         case 'pu': if (!this.host) this.spawnPu(d.i, String(d.t), d.p); break;
+        case 'nukepay': if (sender === Net.hostId) this.onNukePay(d); break;
+        case 'rope': if (sender !== Net.myId && d.a && d.b) this.rope(v3(d.a), v3(d.b), false); break;
+        case 'yank':
+          // a teammate's grapple reels me in while I'm down
+          if (this.player.downed && d.p) { this.player.yank = { to: v3(d.p), t: 2 }; this.hud.centerMsg('BEING REELED IN', [0.5, 1.0, 0.6], 1.2); }
+          break;
         case 'pu_take': if (this.host) this.takePu(d.i); break;
         case 'pu_fx': if (!this.host) this.applyPu(d.i, String(d.t)); break;
         case 'door': this.openDoor(d.i | 0); break;

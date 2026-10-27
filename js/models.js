@@ -730,6 +730,25 @@
     return g;
   };
 
+  // Grapple gun and defib for the wall-buys and the hotbar (chalk = the white wall outline).
+  M.gear = (id, chalk = false) => {
+    const g = new T.Group();
+    const c = col => (chalk ? M.mat([0.9, 0.94, 1.0], 0.4, 0, 1, true) : M.mat(col, 0, 0.4, 0.5));
+    if (id === 'grapple') {
+      M.box(g, [0, 0.03, -0.05], [0.06, 0.08, 0.26], c([0.25, 0.3, 0.35]));
+      M.cyl(g, [0, 0.04, -0.26], 0.025, 0.025, 0.2, c([0.5, 0.52, 0.55]), 8, [Math.PI / 2, 0, 0]);
+      for (const a of [0, 2.1, 4.2]) M.box(g, [Math.cos(a) * 0.03, 0.04 + Math.sin(a) * 0.03, -0.39], [0.012, 0.012, 0.07], c([0.8, 0.8, 0.82]), [Math.sin(a) * 0.5, -Math.cos(a) * 0.5, 0]);
+      M.cyl(g, [0.055, 0.02, -0.06], 0.04, 0.04, 0.05, c([0.75, 0.6, 0.3]), 10, [0, 0, Math.PI / 2]);
+      M.box(g, [0, -0.05, 0.03], [0.035, 0.1, 0.05], c([0.15, 0.15, 0.16]), [0.25, 0, 0]);
+    } else {
+      M.box(g, [0, 0, 0], [0.32, 0.22, 0.1], c([0.85, 0.2, 0.12]));
+      M.box(g, [0, 0.13, 0], [0.12, 0.03, 0.04], c([0.2, 0.2, 0.2]));
+      for (const x of [-0.08, 0.08]) M.box(g, [x, 0, 0.065], [0.1, 0.13, 0.03], c([0.9, 0.9, 0.9]));
+      M.box(g, [0, 0.02, 0.085], [0.02, 0.08, 0.01], c([1.0, 0.85, 0.1]), [0, 0, 0.4]);
+    }
+    return g;
+  };
+
   // ---------------------------------------------------------------- Pack-a-Poonch finish
   // A tiny bright cube map so the gem materials have something to reflect (the rest of the game has none).
   let _papEnv = null;

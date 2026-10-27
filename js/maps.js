@@ -298,7 +298,7 @@
     const phys = new DW.Phys(origin[0], origin[2], -origin[0], -origin[2]);
     const info = {
       spawns: [], player_spawns: [], wallbuys: [], doors: [], boxes: [], perks: [], paps: [], grenadeBuys: [],
-      armors: [], ammos: [], turrets: [], lifts: [], lamps: [], def, phys, origin, size: [w * CELL, h * CELL],
+      armors: [], ammos: [], turrets: [], lifts: [], lamps: [], gear: [], def, phys, origin, size: [w * CELL, h * CELL],
     };
     const grid = rows.map(row => row.split(''));
     const cellPos = (c, r) => [origin[0] + (c + 0.5) * CELL, 0, origin[2] + (r + 0.5) * CELL];
@@ -430,6 +430,7 @@
         info.lamps.push({ pos: [lp[0], lp[1] - 0.3, lp[2]], color: def.lamp, energy: 1.6, range: 11 });
       }
     }
+    placeGear(stat, grid, w, h, cellPos, info);
     if (def.roof) {
       texBox(stat, [0, WALL_H + 0.25, 0], [w * CELL, 0.5, h * CELL], wallMat);
       phys.addBox([0, WALL_H + 0.25, 0], [w * CELL, 0.5, h * CELL], 'roof');
@@ -616,6 +617,51 @@
     holder.add(g);
     M.label(root, [0, 0.62, -0.05], `${wd.name}  ${wd.cost}`, 34, [1.0, 0.95, 0.8]);
     info.wallbuys.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], weapon: wep, zone });
+  }
+
+  // Grapple gun and defib wall-buys have no map letter: they go on the two plain walls facing the start
+  // area nearest the player spawn (3+ cells apart, clear of doors, wall-buys and machines).
+  function placeGear(stat, grid, w, h, cellPos, info) {
+    const sp = info.player_spawns[0] || [0, 0, 0];
+    const busy = (c, r) => {
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const ch = (grid[r + dr] || [])[c + dc];
+        if (ch && 'WGDMKUAREkura'.includes(ch)) return true;
+      }
+      return false;
+    };
+    const cands = [];
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+      if (grid[r][c] !== '#') continue;
+      const { n, zone } = wallFace(grid, c, r, w, h);
+      if (zone !== 0 || busy(c, r) || (grid[r + n[2]] || [])[c + n[0]] !== '.') continue;
+      const p = cellPos(c, r);
+      cands.push([Math.hypot(p[0] - sp[0], p[2] - sp[2]), c, r]);
+    }
+    cands.sort((a, b) => a[0] - b[0]);
+    const used = [];
+    for (const item of ['grapple', 'defib']) {
+      const pick = cands.find(([, c, r]) => used.every(([uc, ur]) => Math.abs(uc - c) + Math.abs(ur - r) >= 3));
+      if (!pick) break;
+      used.push([pick[1], pick[2]]);
+      const [, c, r] = pick;
+      const gd = DW.GEAR[item];
+      const { n } = wallFace(grid, c, r, w, h);
+      const p = cellPos(c, r);
+      const face = [p[0] + n[0] * (CELL * 0.5 + 0.02), 0, p[2] + n[2] * (CELL * 0.5 + 0.02)];
+      const root = M.node(stat, [face[0], 1.5, face[2]], Math.atan2(-n[0], -n[2]));
+      M.box(root, [0, 0, 0], [1.7, 0.85, 0.03], M.mat([0.1, 0.13, 0.16]));
+      for (const e of [[0, 0.4, -0.02], [0, -0.4, -0.02]]) M.box(root, e, [1.6, 0.02, 0.01], M.mat([0.6, 0.85, 1.0], 0.6, 0, 1, true));
+      const holder = M.joint(root, [0, 0, -0.03]);
+      holder.scale.set(1, 1, 0.08);
+      const g = M.gear(item, true);
+      g.rotation.y = -Math.PI / 2;
+      g.scale.setScalar(1.7);
+      g.position.set(item === 'grapple' ? -0.3 : 0, -0.05, 0);
+      holder.add(g);
+      M.label(root, [0, 0.62, -0.05], `${gd.name}  ${gd.cost}`, 34, [0.75, 0.9, 1.0]);
+      info.gear.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], item });
+    }
   }
 
   function buildDoor(scene, phys, grid, c, r, w, h, origin, visited, info) {

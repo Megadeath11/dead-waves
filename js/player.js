@@ -139,10 +139,46 @@
       if (this.perks.includes('stam')) spd *= 1.2;
       if (this.downed) spd = 1.1;
       this.airBoost = Math.max(this.airBoost - dt, 0);
-      const accel = this.onFloor ? 12 : this.airBoost > 0 ? 0.6 : 3;
+      // grapple zip: fly straight at the hook point, no gravity, then a small hop off the end
+      if (this.zip) {
+        const z = this.zip;
+        z.t -= dt;
+        _v.copy(z.to).sub(this.pos);
+        const d = _v.length();
+        if (d < 1.3 || z.t <= 0 || this.downed) {
+          this.zip = null;
+          this.vel.multiplyScalar(0.35);
+          this.vel.y = Math.max(this.vel.y, 4.5);
+        } else {
+          _v.multiplyScalar(DW.GRAPPLE_SPEED / d);
+          this.vel.copy(_v);
+          const bx = this.pos.x, bz = this.pos.z;
+          this.onFloor = this.world.phys.move(this.pos, this.vel, 0.4, 1.8, dt);
+          if (Math.hypot(this.pos.x - bx, this.pos.z - bz) < DW.GRAPPLE_SPEED * dt * 0.15 && z.t < z.max - 0.15) z.t = 0; // snagged
+          this.camHeight = DW.lerp(this.camHeight, 1.65, Math.min(1, dt * 10));
+          this.pivotY = this.camHeight;
+          return;
+        }
+      }
+      // reeled in by a teammate's grapple while down
+      if (this.yank) {
+        this.yank.t -= dt;
+        _v.copy(this.yank.to).sub(this.pos);
+        _v.y = 0;
+        const d = _v.length();
+        if (d < 0.6 || this.yank.t <= 0 || !this.downed) this.yank = null;
+        else { _v.multiplyScalar(Math.min(18, d * 6) / d); dx = _v.x; dz = _v.z; spd = 1; }
+      }
+      // in the air you can steer without losing your speed, and letting go of the keys brakes you
+      let tx = dx * spd, tz = dz * spd;
+      if (!this.onFloor && !this.yank && dl > 1e-4) {
+        const keep = Math.max(spd, Math.hypot(this.vel.x, this.vel.z) - dt * 2);
+        tx = dx * keep; tz = dz * keep;
+      }
+      const accel = this.yank ? 30 : this.onFloor ? 12 : this.airBoost > 0 ? 4 : 7;
       const k = Math.min(1, dt * accel);
-      this.vel.x = DW.lerp(this.vel.x, dx * spd, k);
-      this.vel.z = DW.lerp(this.vel.z, dz * spd, k);
+      this.vel.x = DW.lerp(this.vel.x, tx, k);
+      this.vel.z = DW.lerp(this.vel.z, tz, k);
       if (!this.onFloor) this.vel.y -= GRAV * dt;
       else if (canAct && I.justPressed('jump') && !this.downed) this.vel.y = JUMP;
       this.onFloor = this.world.phys.move(this.pos, this.vel, 0.4, 1.8, dt);
@@ -206,6 +242,7 @@
       this.flashEnergy = DW.moveToward(this.flashEnergy, 0, dt * 60);
       this.vmFlash.intensity = this.flashEnergy * 0.6;
       if (this.flashMesh) this.flashMesh.visible = this.firedFlag > 0.1;
+      this.grappleCd = Math.max((this.grappleCd || 0) - dt, 0);
       if (this.reloading) {
         this.reloadT -= dt;
         if (this.reloadT <= 0) this.finishReload();
@@ -240,6 +277,7 @@
       if (I.justPressed('weapon_4')) this.switchTo(2);
       if (I.justPressed('sentry')) w.placeSentry();
       if (I.justPressed('weapon_3')) this.toggleWind();
+      if (I.justPressed('grapple')) this.fireGrapple();
       if (I.justPressed('swap')) this.cycleWeapon();
       if (I.justPressed('melee')) this.melee();
       if (I.justPressed('grenade')) this.throwGrenade();
@@ -396,7 +434,10 @@
       const w = this.active(), wd = this.wdata();
       if (this.reloading || w.mag >= DW.magOf(w) || w.reserve <= 0 || this.switchT > 0) return;
       this.reloading = true;
-      this.reloadT = this.reloadTotal = wd.reload * (this.perks.includes('fast') ? 0.5 : 1);
+      // topping up a part-empty mag is quicker: 35% of the time is fixed, the rest scales with how much is missing
+      const full = DW.magOf(w), missing = (full - w.mag) / full;
+      this.reloadShells = DW.clamp(Math.round((full - w.mag) / Math.max(1, full / 6)), 1, 6);
+      this.reloadT = this.reloadTotal = wd.reload * (this.perks.includes('fast') ? 0.5 : 1) * (0.35 + 0.65 * missing);
       this.reloadSfx = 0;
       DW.Sfx.play('empty', -8, 0.8);
     }
@@ -423,15 +464,17 @@
       rot[0] += 0.25 * tilt; rot[2] += roll * tilt;
       let sfx = [];
       if (style === 'shells') {
-        // four shells pushed into the tube under the gun, then a pump
-        const n = 4, ph = DW.clamp((u - 0.14) / 0.64, 0, 1) * n, f = ph % 1, on = u > 0.14 && u < 0.78;
+        // shells pushed into the tube under the gun (more when it was emptier), then a pump
+        const n = this.reloadShells || 4, ph = DW.clamp((u - 0.14) / 0.64, 0, 1) * n, f = ph % 1, on = u > 0.14 && u < 0.78;
         if (mag) { mag.visible = on; mag.position.set(0, -0.06 * (1 - ease(f)), 0.12 * (1 - ease(f))); }
         if (lh && on) { lh.position.y = -0.05 * Math.sin(f * Math.PI); lh.position.z = 0.12 * (1 - ease(f)); }
         if (on) rot[0] += 0.04 * Math.sin(f * Math.PI);
         const pk = bump(0.8, 0.94);
         if (parts.pump) parts.pump.position.z = 0.09 * pk;
         if (lh) lh.position.z += 0.08 * pk;
-        sfx = [[0.25, 'reload', -10, 1.6], [0.41, 'reload', -10, 1.5], [0.57, 'reload', -10, 1.6], [0.73, 'reload', -10, 1.5], [0.82, 'empty', -4, 0.6], [0.9, 'empty', -4, 0.9]];
+        sfx = [];
+        for (let i = 0; i < n; i++) sfx.push([0.14 + 0.64 * (i + 0.7) / n, 'reload', -10, i % 2 ? 1.5 : 1.6]);
+        sfx.push([0.82, 'empty', -4, 0.6], [0.9, 'empty', -4, 0.9]);
       } else if (style === 'cells') {
         // the glowing cells spin, pop out the back, and a fresh set slides in
         const out = seg(0.14, 0.34), inn = seg(0.55, 0.78);
@@ -515,6 +558,54 @@
       this.switchT = 0.6;
       this.buildGun();
       this.world.sendPstate(true);
+    }
+
+    giveGear(id) {
+      this[id] = true;
+      DW.Sfx.play('buy', 0);
+      const g = DW.GEAR[id];
+      this.world.hud.centerMsg(`${g.name.toUpperCase()}\n${g.desc}`, [0.5, 0.85, 1.0], 3);
+      this.world.sendPstate(true);
+    }
+    // Grapple gun: a downed teammate near your aim gets reeled in to you; otherwise you zip to the wall/floor you hit
+    fireGrapple() {
+      const w = this.world;
+      if (!this.grapple) { DW.Sfx.play('deny', -6); w.hud.centerMsg(`No grapple gun\nBuy one off the wall (${DW.GEAR.grapple.cost})`, [0.6, 0.8, 1.0], 1.6); return; }
+      if (this.grappleCd > 0 || this.downed || this.dead) { DW.Sfx.play('deny', -8); return; }
+      const eye = this.eye(new THREE.Vector3()), f = this.forward(new THREE.Vector3());
+      const R = DW.GRAPPLE_RANGE;
+      let best = null, bd = 1.8;
+      for (const [id, r] of w.remotes) {
+        if (!r.down || r.dead) continue;
+        const cx = r.posV.x - eye.x, cy = r.posV.y + 0.4 - eye.y, cz = r.posV.z - eye.z;
+        const along = cx * f.x + cy * f.y + cz * f.z;
+        if (along < 1 || along > R) continue;
+        const off = Math.sqrt(Math.max(0, cx * cx + cy * cy + cz * cz - along * along));
+        if (off < bd && w.hasLine(eye, new THREE.Vector3(r.posV.x, r.posV.y + 0.5, r.posV.z))) { bd = off; best = [id, r]; }
+      }
+      const from = this.muzzle ? this.muzzle.getWorldPosition(new THREE.Vector3()) : eye.clone();
+      if (best) {
+        const [id, r] = best;
+        this.grappleCd = DW.GRAPPLE_CD;
+        DW.Sfx.play('throw', -2, 0.7);
+        const to = [this.pos.x + f.x * 1.4, this.pos.y + 0.1, this.pos.z + f.z * 1.4];
+        DW.Net.sendTo(id, 'yank', { p: to });
+        w.rope(eye, new THREE.Vector3(r.posV.x, r.posV.y + 0.5, r.posV.z), true);
+        w.hud.centerMsg(`Reeling in ${r.name}`, [0.5, 1.0, 0.6], 1.5);
+        return;
+      }
+      const sh = w.phys.raycast(eye, f, R);
+      if (!sh) { DW.Sfx.play('deny', -8); w.rope(eye, eye.clone().addScaledVector(f, R * 0.5), true); return; }
+      this.grappleCd = DW.GRAPPLE_CD;
+      DW.Sfx.play('throw', -2, 0.7);
+      const hit = eye.clone().addScaledVector(f, sh.t);
+      // aim the zip a little off the surface so you land in front of it
+      const n = sh.normal || [0, 1, 0];
+      const to = hit.clone().add(new THREE.Vector3(n[0] * 0.9, n[1] * 0.2 - 1.2, n[2] * 0.9));
+      const max = Math.min(2.5, sh.t / DW.GRAPPLE_SPEED + 0.4);
+      this.zip = { to, t: max, max };
+      this.onFloor = false;
+      w.rope(eye, hit, true);
     }
 
     hasWeapon(id) { return this.weapons.some(w => w.id === id); }
@@ -661,7 +752,7 @@
       this.downs += 1;
       this.reloading = false;
       this.adsAmt = 0;
-      // perks and guns are kept through a down (owner's rule); a revive costs one Pack-a-Poonch tier instead.
+      // a down costs nothing: perks, guns and Pack-a-Poonch tiers are all kept (only bleeding out costs a tier).
       // Solo Second Wind is used up by the self-revive it gives.
       const hadWind = this.perks.includes('wind');
       if (hadWind && w.solo) this.perks = this.perks.filter(p => p !== 'wind');
@@ -685,35 +776,28 @@
       this.hp = this.maxHp * 0.6;
       this.regenDelay = 1;
       this.world.onLocalRevive();
-      let lost = false;
-      for (const g of this.weapons) {
-        if (!(g.pap > 0)) continue;
-        g.pap--;
-        g.mag = Math.min(g.mag, DW.magOf(g));
-        g.reserve = Math.min(g.reserve, DW.reserveOf(g));
-        lost = true;
-      }
       this.buildGun();
-      this.world.hud.centerMsg(lost ? 'REVIVED\nPack-a-Poonch dropped a tier' : 'REVIVED', [0.5, 1.0, 0.5], lost ? 2.5 : 1.5);
+      this.world.hud.centerMsg('REVIVED', [0.5, 1.0, 0.5], 1.5);
       this.world.sendPstate(true);
     }
     bleedOut() {
       this.downed = false;
       this.dead = true;
       this.gunRoot.visible = false;
-      this.world.hud.centerMsg("YOU BLED OUT\nYou'll respawn next wave", [0.9, 0.2, 0.2], 4);
+      this.world.hud.centerMsg("YOU BLED OUT\nYou'll respawn next wave - your guns lose a Pack-a-Poonch tier", [0.9, 0.2, 0.2], 4);
       this.world.sendPstate(true);
     }
     respawn(pos) {
       this.dead = false;
       this.downed = false;
-      this.hp = 100;
-      this.maxHp = 100;
+      // bleeding out keeps your perks, guns and gear; the only cost is one Pack-a-Poonch tier on each gun
+      this.hp = this.maxHp;
       this.armor = 0;
-      this.perks = [];
-      const pd = DW.WEAPONS.pistol;
-      this.weapons = [{ id: 'pistol', mag: pd.mag, reserve: pd.reserve }];
-      this.cur = 0;
+      for (const g of this.weapons) {
+        if (g.pap > 0) g.pap--;
+        g.mag = DW.magOf(g);
+        g.reserve = DW.reserveOf(g);
+      }
       this.windOut = false;
       this.wind.mag = DW.WIND_CHARGES;
       this.pos.fromArray(pos);

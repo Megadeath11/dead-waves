@@ -172,6 +172,15 @@
   .zcount { font-size: 26px; font-weight: 800; color: var(--bone); letter-spacing: 2px; -webkit-text-stroke: 5px rgba(0,0,0,.9); margin: 2px 0 4px; }
   .zcount.last { color: rgb(255, 120, 40); animation: lastz .6s infinite alternate; }
   @keyframes lastz { to { color: rgb(255, 40, 20); } }
+  .hotbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%) scale(var(--hud, 1)); transform-origin: 50% 100%; display: flex; gap: 6px; }
+  .hslot { position: relative; width: 104px; height: 62px; background: rgba(8, 8, 10, .72); border: 2px solid rgba(255,255,255,.14); border-radius: 3px; text-align: center; padding-top: 12px; }
+  .hslot.on { border-color: var(--gold); background: rgba(60, 45, 10, .8); box-shadow: 0 0 12px rgba(255, 200, 60, .45); }
+  .hslot.off { opacity: .4; }
+  .hslot.low .hsub { color: rgb(255, 90, 70); }
+  .hkey { position: absolute; left: 4px; top: 2px; font: 700 12px Consolas, monospace; color: var(--gold); -webkit-text-stroke: 0; }
+  .hname { font-size: 15px; font-weight: 800; letter-spacing: 1px; color: var(--bone); -webkit-text-stroke: 3px rgba(0,0,0,.9); white-space: nowrap; }
+  .hname b { color: rgb(120, 230, 255); margin-left: 3px; }
+  .hsub { font-size: 15px; font-weight: 700; color: var(--dim); -webkit-text-stroke: 3px rgba(0,0,0,.9); font-variant-numeric: tabular-nums; }
   .putimers { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); display: flex; gap: 18px; }
   .putimer { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.6); border: 3px solid var(--pc); padding: 8px 14px 8px 8px; box-shadow: 0 0 18px var(--pc); }
   .putimer.ending { animation: puend .3s infinite alternate; }

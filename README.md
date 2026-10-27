@@ -29,7 +29,10 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
 - **Reload animations** for every gun (mag swaps, shotgun shells and pump, Barrett bolt, plasma cells, Death Machine ammo box).
-- **Downs**: you keep your perks and guns when you're revived; each revive costs one Pack-a-Poonch tier on your guns. Big bleed-out and revive bars.
+- **Downs** cost nothing: revived players keep everything. Bleeding out keeps your perks and guns too, but each gun drops one Pack-a-Poonch tier. Big bleed-out and revive bars.
+- **Gear wall-buys** (3,000 each, on the walls near the start): the **Grapple Gun** (key 5) reels a downed teammate in to you, or zips you to whatever wall you aim at; the **Defibrillator** makes your revives take 1 second.
+- **Hotbar** along the bottom with every gun, the wind charge, grapple, defib, grenades and sentries.
+- Partial reloads are quicker; you can steer and brake in mid-air; the Nuke pays 100 per zombie it kills, split between everyone.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
 - **Settings** in five tabs: graphics (quality presets Low-Ultra, render resolution, shadows, lamp lights, particles, anti-aliasing, brightness, FOV, FPS limit and counter), audio (master / music / effects, mute when alt-tabbed), controls (sensitivity, aim sensitivity, invert Y, toggle aim / crouch), key bindings for every action, and HUD (crosshair colour and size, hit markers, point popups, HUD size, view bob, screen shake).
 - Local stats and best runs per map and difficulty.
@@ -51,6 +54,7 @@ Default keys; every one can be changed under Settings > Key bindings.
 | Wind charge (knock zombies back, shoot at your feet to launch yourself) | 3 |
 | Buy / open door / revive (hold) | E or F |
 | Place a sentry turret (8,000) | T |
+| Grapple gun (once bought) | 5 |
 | Players online: stats and ping | Tab |
 | Menu / settings | Esc |
 | Fullscreen | F11 |

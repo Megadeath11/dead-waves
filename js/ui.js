@@ -41,7 +41,7 @@
     ['jump', 'Jump'], ['sprint', 'Sprint'], ['crouch', 'Crouch'], ['fire', 'Fire'], ['ads', 'Aim down sights'],
     ['reload', 'Reload'], ['interact', 'Use / buy / revive'], ['melee', 'Knife'], ['grenade', 'Grenade'],
     ['weapon_1', 'Weapon 1'], ['weapon_2', 'Weapon 2'], ['weapon_3', 'Wind charge'], ['weapon_4', 'Weapon 4 (Mule Kick)'],
-    ['swap', 'Swap weapon'], ['sentry', 'Place sentry'], ['scoreboard', 'Scoreboard'], ['skip', 'Skip intermission'],
+    ['swap', 'Swap weapon'], ['grapple', 'Grapple gun'], ['sentry', 'Place sentry'], ['scoreboard', 'Scoreboard'], ['skip', 'Skip intermission'],
   ];
   const TABS = [
     ['graphics', 'Graphics', ['quality', 'renderScale', 'shadows', 'aa', 'lights', 'particles', 'brightness', 'fov', 'fpsCap', 'showFps', 'fullscreen']],

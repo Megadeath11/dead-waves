@@ -8,7 +8,7 @@
     jump: ['Space'], sprint: ['ShiftLeft', 'ShiftRight'], crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
     reload: ['KeyR'], interact: ['KeyE', 'KeyF'], melee: ['KeyV', 'Mouse1'],
     grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], weapon_3: ['Digit3', 'Mouse3', 'Mouse4'], swap: ['KeyQ'],
-    scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'], weapon_4: ['Digit4'], skip: ['Enter', 'NumpadEnter'], sentry: ['KeyT'],
+    scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'], weapon_4: ['Digit4'], skip: ['Enter', 'NumpadEnter'], sentry: ['KeyT'], grapple: ['Digit5'],
   };
   // the first key of each action can be rebound in Settings; the extra keys stay unless another action took them
   const DEFAULTS = JSON.parse(JSON.stringify(MAP));

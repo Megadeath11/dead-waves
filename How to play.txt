@@ -17,7 +17,9 @@ Controls (defaults - change any key under Settings > Key bindings)
   E buy / open doors / ride elevators / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
   T place a sentry turret (8,000, up to 4 each), Tab players online with stats and ping
   Jumping headshots are crits (double damage).
-  Getting revived keeps your perks; your guns drop one Pack-a-Poonch tier.
+  Going down costs nothing. Bleeding out keeps your stuff but drops one Pack-a-Poonch tier.
+  5 grapple gun (3,000 wall-buy): reel in a downed teammate, or zip to a wall.
+  Defibrillator (3,000 wall-buy): revive teammates in 1 second.
   Pack-a-Poonch tiers also double the gun's magazine and ammo each time.
   Dodgers (hooded, cyan eyes, from wave 6) sidestep when you aim at them: shoot between dodges.
 
