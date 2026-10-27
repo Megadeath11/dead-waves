@@ -7,8 +7,8 @@
     move_left: ['KeyA', 'ArrowLeft'], move_right: ['KeyD', 'ArrowRight'],
     jump: ['Space'], sprint: ['ShiftLeft', 'ShiftRight'], crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
     reload: ['KeyR'], interact: ['KeyE', 'KeyF'], melee: ['KeyV', 'Mouse1'],
-    grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], weapon_3: ['Digit3', 'Mouse3', 'Mouse4'], swap: ['KeyQ'],
-    scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'], weapon_4: ['Digit4'], skip: ['Enter', 'NumpadEnter'], sentry: ['KeyT'], grapple: ['Digit5'],
+    grenade: ['KeyG'], weapon_1: ['Digit1'], weapon_2: ['Digit2'], weapon_3: ['Digit3'], wind: ['Digit4', 'Mouse3', 'Mouse4'], swap: ['KeyQ'],
+    scoreboard: ['Tab'], fire: ['Mouse0'], ads: ['Mouse2'], skip: ['Enter', 'NumpadEnter'], sentry: ['KeyT'], grapple: ['Digit5'], defib: ['Digit6'],
   };
   // the first key of each action can be rebound in Settings; the extra keys stay unless another action took them
   const DEFAULTS = JSON.parse(JSON.stringify(MAP));
@@ -25,7 +25,7 @@
     const old = MAP[action][0];
     for (const a in MAP) if (a !== action && MAP[a][0] === code) binds[a] = old;
     binds[action] = code;
-    for (const a in binds) if (binds[a] === DEFAULTS[a][0]) delete binds[a];
+    for (const a in binds) if (!DEFAULTS[a] || binds[a] === DEFAULTS[a][0]) delete binds[a];
     I.applyBinds(binds);
   };
   I.primary = action => MAP[action][0];

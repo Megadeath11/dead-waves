@@ -1057,7 +1057,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     onNukePay(d) {
       const share = +d.s || 0;
       if (share > 0) this.player.addPoints(share);
-      this.hud.centerMsg(`NUKE\n${d.n | 0} killed  +${share} each`, PU_INFO.nuke.color, 2.5);
+      this.hud.centerMsg(`NUKE\n${d.n | 0} zombies killed\n+${share} points`, PU_INFO.nuke.color, 2.5);
     }
 
     // ---------------------------------------------------------------- interactions
@@ -1067,8 +1067,9 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const pp = p.pos;
       for (const [id, r] of this.remotes) {
         if (r.down && !r.dead && r.posV.distanceTo(pp) < 2.3) {
-          const t = p.defib ? 1.0 : p.perks.includes('wind') ? 1.5 : 3.0;
-          return { text: `Hold E to revive ${r.name}`, hold: t, revive: id, action: () => this.reviveRemote(id) };
+          const t = p.defibOut ? 1.0 : p.perks.includes('wind') ? 1.5 : 3.0;
+          const tip = p.defib && !p.defibOut ? `\nHold out your defib [${DW.Input.keyName('defib')}] for a 1 second revive` : '';
+          return { text: `Hold E to revive ${r.name}${tip}`, hold: t, revive: id, action: () => this.reviveRemote(id) };
         }
       }
       for (let i = 0; i < this.info.doors.length; i++) {
@@ -1110,7 +1111,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       for (const pa of this.info.paps) {
         if (Math.hypot(pa.pos[0] - pp.x, pa.pos[1] - pp.y, pa.pos[2] - pp.z) < 2.3) {
           const a = p.active(), wd = DW.WEAPONS[a.id];
-          if (a.id === 'wind') return { text: "The Pack-a-Poonch can't take the wind charge" };
+          if (a.id === 'wind' || a.id === 'defib') return { text: 'The Pack-a-Poonch only takes guns' };
           const tier = a.pap | 0;
           if (tier >= 3) return { text: `Your ${wd.name} is fully Pack-a-Poonched (tier III, ${DW.PAP_DMG[3]}x damage)` };
           const cost = DW.PAP_COSTS[tier + 1];

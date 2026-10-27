@@ -113,13 +113,13 @@
       const gem = '\u25C6'.repeat(tier);
       this.set(this.weaponL, 'wep', (tier ? `${gem} ${wd.name} ${gem}  ${DW.PAP_NAMES[tier]}` : wd.name) + (p.reloading ? '   [RELOADING]' : ''));
       this.weaponL.style.color = ['', 'rgb(90, 255, 170)', 'rgb(110, 160, 255)', 'rgb(210, 130, 255)'][tier];
-      this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : `${a.mag} / ${a.reserve}`);
+      this.set(this.ammoL, 'ammo', a.id === 'wind' ? `${a.mag} / ${DW.WIND_CHARGES}` : a.id === 'defib' ? 'READY' : `${a.mag} / ${a.reserve}`);
       this.ammoL.style.color = UI.rgb(a.mag <= Math.floor(DW.magOf(a) / 4) ? RED : BONE);
       this.set(this.nadeL, 'nade', '');
       this.updateHotbar();
       const lowMag = a.mag <= Math.max(1, Math.floor(DW.magOf(a) / 4));
       let hint = '';
-      if (p.dead || p.reloading || a.id === 'wind') hint = '';
+      if (p.dead || p.reloading || a.id === 'wind' || a.id === 'defib') hint = '';
       else if (a.mag === 0 && a.reserve === 0) hint = 'NO AMMO';
       else if (lowMag && a.reserve > 0) hint = `RELOAD  [${DW.Input.keyName('reload')}]`;
       else if (lowMag) hint = 'LOW AMMO';
@@ -243,15 +243,20 @@
     updateHotbar() {
       const w = this.world, p = w.player, K = DW.Input.keyName;
       const slots = [];
-      const keys = ['weapon_1', 'weapon_2', 'weapon_4'];
-      p.weapons.forEach((g, i) => {
-        const pap = g.pap > 0 ? ' ' + 'I'.repeat(g.pap) : '';
-        slots.push({ key: K(keys[i]), name: SHORT[g.id] || DW.WEAPONS[g.id].name, sub: `${g.mag}/${g.reserve}`, on: !p.windOut && !p.downed && p.cur === i, pap });
-      });
-      slots.push({ key: K('weapon_3'), name: 'WIND', sub: `${p.wind.mag}/${DW.WIND_CHARGES}`, on: p.windOut && !p.downed, low: p.wind.mag === 0 });
+      // 1 primary, 2 second primary (Mule Kick), 3 pistol; the pistol is always the last entry of p.weapons
+      const n = p.weapons.length - 1, hand = !p.windOut && !p.defibOut && !p.downed;
+      const gun = (key, i) => {
+        const g = p.weapons[i], pap = g.pap > 0 ? ' ' + 'I'.repeat(g.pap) : '';
+        slots.push({ key: K(key), name: SHORT[g.id] || DW.WEAPONS[g.id].name, sub: `${g.mag}/${g.reserve}`, on: hand && p.cur === i, pap });
+      };
+      if (n >= 1) gun('weapon_1', 0); else slots.push({ key: K('weapon_1'), name: 'PRIMARY', sub: 'empty', off: true });
+      if (n >= 2) gun('weapon_2', 1);
+      else slots.push({ key: K('weapon_2'), name: '2ND GUN', sub: p.perks.includes('mule') ? 'empty' : 'Mule Kick', off: true });
+      gun('weapon_3', n);
+      slots.push({ key: K('wind'), name: 'WIND', sub: `${p.wind.mag}/${DW.WIND_CHARGES}`, on: p.windOut && !p.downed, low: p.wind.mag === 0 });
       const gcd = p.grappleCd > 0 ? Math.ceil(p.grappleCd) + 's' : 'READY';
       slots.push({ key: K('grapple'), name: 'GRAPPLE', sub: p.grapple ? gcd : DW.GEAR.grapple.cost, off: !p.grapple, low: p.grapple && p.grappleCd > 0 });
-      slots.push({ key: '', name: 'DEFIB', sub: p.defib ? '1s revive' : DW.GEAR.defib.cost, off: !p.defib });
+      slots.push({ key: K('defib'), name: 'DEFIB', sub: p.defib ? (p.defibOut ? 'IN HAND' : '1s revive') : DW.GEAR.defib.cost, off: !p.defib, on: p.defibOut && !p.downed });
       slots.push({ key: K('grenade'), name: 'GRENADE', sub: 'x' + p.grenades, low: p.grenades === 0 });
       slots.push({ key: K('sentry'), name: 'SENTRY', sub: `${w.mySentries()}/${DW.SENTRY_MAX}` });
       const sig = slots.map(o => [o.key, o.name, o.sub, o.on, o.off, o.low, o.pap].join(',')).join('|');
@@ -396,6 +401,7 @@
     openPause() {
       const w = this.world;
       if (w.gameOver || this.pausePanel) return;
+      this.pausedAt = performance.now();
       const pp = this.pausePanel = UI.el('div', 'overlay dim');
       const panel = UI.el('div', 'panel center-panel');
       pp.appendChild(panel);

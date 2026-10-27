@@ -34,6 +34,9 @@
       this.flashEnergy = 0;
       this.wind = { id: 'wind', mag: DW.WIND_CHARGES, reserve: 0 };
       this.windOut = false;
+      this.defibItem = { id: 'defib', mag: 1, reserve: 0 };
+      this.defibOut = false;
+      this.lastPrim = 0;
       this.windRegen = 0;
       this.airBoost = 0;
 
@@ -59,7 +62,7 @@
       this.buildGun();
     }
 
-    active() { return this.downed ? this.downedWeapon : this.windOut ? this.wind : this.weapons[this.cur]; }
+    active() { return this.downed ? this.downedWeapon : this.windOut ? this.wind : this.defibOut ? this.defibItem : this.weapons[this.cur]; }
     wdata() { return DW.WEAPONS[this.active().id]; }
     alive() { return !this.downed && !this.dead; }
     eye(out = new THREE.Vector3()) { return out.set(this.pos.x, this.pos.y + this.pivotY, this.pos.z); }
@@ -69,20 +72,39 @@
     }
 
     cycleWeapon() {
-      if (this.windOut) this.switchTo(this.cur, true);
+      if (this.windOut || this.defibOut) this.switchTo(this.cur, true);
       else if (this.weapons.length > 1) this.switchTo((this.cur + 1) % this.weapons.length);
     }
     toggleWind() {
       if (this.windOut) { this.switchTo(this.cur, true); return; }
       this.windOut = true;
+      this.defibOut = false;
       this.reloading = false;
       this.switchT = 0.3;
       this.buildGun();
     }
-    switchTo(i, force = false) {
-      if (i < 0 || i >= this.weapons.length || (i === this.cur && !force && !this.windOut)) return; // from the wind charge, any slot key works, even the gun it was swapped from
-      this.cur = i;
+    // the defib is held out like the wind charge; reviving while it's in your hand takes 1 s
+    toggleDefib() {
+      if (!this.defib) { DW.Sfx.play('deny', -6); this.world.hud.centerMsg(`No defibrillator\nBuy one off the wall (${DW.GEAR.defib.cost})`, [0.6, 0.8, 1.0], 1.6); return; }
+      if (this.defibOut) { this.switchTo(this.cur, true); return; }
+      this.defibOut = true;
       this.windOut = false;
+      this.reloading = false;
+      this.switchT = 0.3;
+      this.buildGun();
+      DW.Sfx.play('pickup', -8, 1.3);
+    }
+    // weapon keys: 1 primary, 2 second primary (needs Mule Kick), 3 pistol (always the last entry)
+    slotIndex(k) {
+      const n = this.weapons.length - 1;
+      return k === 2 ? n : k < n ? k : -1;
+    }
+    switchTo(i, force = false) {
+      if (i < 0 || i >= this.weapons.length || (i === this.cur && !force && !this.windOut && !this.defibOut)) return; // from the wind charge or defib, any slot key works, even the gun it was swapped from
+      this.cur = i;
+      if (i < this.weapons.length - 1) this.lastPrim = i;
+      this.windOut = false;
+      this.defibOut = false;
       this.reloading = false;
       this.switchT = 0.45;
       this.buildGun();
@@ -272,11 +294,12 @@
       this.triggerHeld = trig;
       if (I.justPressed('reload')) this.startReload();
       if (this.downed) { hud.setInteract('', 0); return; }
-      if (I.justPressed('weapon_1')) this.switchTo(0);
-      if (I.justPressed('weapon_2')) this.switchTo(1);
-      if (I.justPressed('weapon_4')) this.switchTo(2);
+      if (I.justPressed('weapon_1')) this.switchTo(this.slotIndex(0));
+      if (I.justPressed('weapon_2')) this.switchTo(this.slotIndex(1));
+      if (I.justPressed('weapon_3')) this.switchTo(this.slotIndex(2));
       if (I.justPressed('sentry')) w.placeSentry();
-      if (I.justPressed('weapon_3')) this.toggleWind();
+      if (I.justPressed('wind')) this.toggleWind();
+      if (I.justPressed('defib')) this.toggleDefib();
       if (I.justPressed('grapple')) this.fireGrapple();
       if (I.justPressed('swap')) this.cycleWeapon();
       if (I.justPressed('melee')) this.melee();
@@ -333,6 +356,7 @@
     // ---------------------------------------------------------------- weapons
     tryFire() {
       const w = this.active(), wd = this.wdata();
+      if (w.id === 'defib') return;
       if (this.fireCd > 0 || this.reloading || this.switchT > 0 || this.meleeAnim > 0.2) return;
       if (!wd.auto && this.triggerHeld) return;
       if (w.mag <= 0) {
@@ -539,13 +563,17 @@
           return;
         }
       }
+      // new guns only ever go in the primary slots (1, and 2 with Mule Kick); the pistol on 3 is never traded away,
+      // so holding it while buying replaces the primary you last held instead of handing out a free extra gun
       const entry = { id, mag: wd.mag, reserve: wd.reserve };
-      if (this.weapons.length < this.slots()) {
-        this.weapons.push(entry);
-        this.switchTo(this.weapons.length - 1, true);
+      const n = this.weapons.length - 1;
+      if (n < this.primSlots()) {
+        this.weapons.splice(n, 0, entry);
+        this.switchTo(n, true);
       } else {
-        this.weapons[this.cur] = entry;
-        this.switchTo(this.cur, true);
+        const i = this.cur < n ? this.cur : Math.min(this.lastPrim, n - 1);
+        this.weapons[i] = entry;
+        this.switchTo(i, true);
       }
     }
     // Pack-a-Poonch the gun in hand: gem finish, more damage, full ammo
@@ -609,7 +637,7 @@
     }
 
     hasWeapon(id) { return this.weapons.some(w => w.id === id); }
-    slots() { return this.perks.includes('mule') ? 3 : 2; }
+    primSlots() { return this.perks.includes('mule') ? 2 : 1; }
     // Max Ammo: every gun full (mags too, so no reload needed) and grenades back up to 4
     refillAmmo() {
       for (const w of this.weapons) { w.reserve = DW.reserveOf(w); w.mag = DW.magOf(w); }
@@ -756,7 +784,7 @@
       // Solo Second Wind is used up by the self-revive it gives.
       const hadWind = this.perks.includes('wind');
       if (hadWind && w.solo) this.perks = this.perks.filter(p => p !== 'wind');
-      this.armor = 0;
+      this.defibOut = false;
       const pd = DW.WEAPONS.pistol;
       this.downedWeapon = { id: 'pistol', mag: pd.mag, reserve: pd.mag * 3 };
       this.buildGun();
@@ -799,6 +827,7 @@
         g.reserve = DW.reserveOf(g);
       }
       this.windOut = false;
+      this.defibOut = false;
       this.wind.mag = DW.WIND_CHARGES;
       this.pos.fromArray(pos);
       this.vel.set(0, 0, 0);

@@ -582,7 +582,7 @@
       g.scale.set(1, 1, 0.15);
       root.add(g);
     }
-    M.label(root, [0, 0.62, -0.05], `GRENADES  ${DW.GRENADE_COST} each`, 34, [1.0, 0.95, 0.8]);
+    M.flatText(root, [0, 0.62, -0.03], `GRENADES  ${DW.GRENADE_COST} each`, 34, [1.0, 0.95, 0.8], 0.004, Math.PI, 8);
     info.grenadeBuys.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], zone });
   }
 
@@ -615,7 +615,7 @@
     g.scale.setScalar(gs);
     g.position.set(-wd.len * 0.4 * gs, -0.02, 0);
     holder.add(g);
-    M.label(root, [0, 0.62, -0.05], `${wd.name}  ${wd.cost}`, 34, [1.0, 0.95, 0.8]);
+    M.flatText(root, [0, 0.62, -0.03], `${wd.name}  ${wd.cost}`, 34, [1.0, 0.95, 0.8], 0.004, Math.PI, 8);
     info.wallbuys.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], weapon: wep, zone });
   }
 
@@ -659,7 +659,7 @@
       g.scale.setScalar(1.7);
       g.position.set(item === 'grapple' ? -0.3 : 0, -0.05, 0);
       holder.add(g);
-      M.label(root, [0, 0.62, -0.05], `${gd.name}  ${gd.cost}`, 34, [0.75, 0.9, 1.0]);
+      M.flatText(root, [0, 0.62, -0.03], `${gd.name}  ${gd.cost}`, 34, [0.75, 0.9, 1.0], 0.004, Math.PI, 8);
       info.gear.push({ pos: [face[0] + n[0] * 0.6, 0, face[2] + n[2] * 0.6], item });
     }
   }

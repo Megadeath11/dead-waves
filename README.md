@@ -23,14 +23,14 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - **30 s break between rounds**; everyone presses Enter to skip it.
 - **10 guns** with no spread: every bullet goes exactly where the dot is, standing, running or aiming. Wall-buys (M9, M14, Pump Shotgun, MP5, AK-47) and the **Mystery Box** (LMG, Desert Hawk, Barrett .50, Plasma Caster, Death Machine).
 - **4 perks**: Iron Hide, Fast Hands, Double Tap, Second Wind. **Power-ups**: Max Ammo, Double Points, Insta-Kill, Nuke.
-- **Pack-a-Poonch** desk (20,000): gem finish and 4x damage. **Grenade wall-buy** fills you up to 10. **Wind charge** on key 3.
+- **Pack-a-Poonch** desk (20,000): gem finish and 4x damage. **Grenade wall-buy** fills you up to 10. **Wind charge** on key 4.
 - **The Goon Lord** (the Wendygoon) rises on wave 20 and puts the lights out.
 - **Dodgers** (from wave 6): hooded zombies with cyan eyes that sidestep whenever someone aims at them. Lead your shots and fire between dodges.
 - **Bosses** every 5 waves (4 on Veteran): the Brute (ground slam) and the Abomination (acid lobs).
 - **4 difficulties**: Recruit, Regular, Hardened, Veteran.
 - **Reload animations** for every gun (mag swaps, shotgun shells and pump, Barrett bolt, plasma cells, Death Machine ammo box).
 - **Downs** cost nothing: revived players keep everything. Bleeding out keeps your perks and guns too, but each gun drops one Pack-a-Poonch tier. Big bleed-out and revive bars.
-- **Gear wall-buys** (3,000 each, on the walls near the start): the **Grapple Gun** (key 5) reels a downed teammate in to you, or zips you to whatever wall you aim at; the **Defibrillator** makes your revives take 1 second.
+- **Gear wall-buys** (3,000 each, on the walls near the start): the **Grapple Gun** (key 5) reels a downed teammate in to you, or zips you to whatever wall you aim at; the **Defibrillator** (key 6) makes revives take 1 second while you hold it out.
 - **Hotbar** along the bottom with every gun, the wind charge, grapple, defib, grenades and sentries.
 - Partial reloads are quicker; you can steer and brake in mid-air; the Nuke pays 100 per zombie it kills, split between everyone.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
@@ -47,14 +47,16 @@ Default keys; every one can be changed under Settings > Key bindings.
 | Move / sprint / crouch / jump | WASD / Shift / Ctrl or C / Space |
 | Fire / aim down sights | Left / right mouse |
 | Reload | R |
-| Switch weapon | 1, 2, 4 (Mule Kick), Q or mouse wheel |
+| Primary gun / second primary (Mule Kick) / pistol | 1 / 2 / 3 |
+| Cycle weapons | Q or mouse wheel |
 | Vote to skip the break between rounds | Enter |
 | Knife | V or middle mouse |
 | Grenade | G |
-| Wind charge (knock zombies back, shoot at your feet to launch yourself) | 3 |
+| Wind charge (knock zombies back, shoot at your feet to launch yourself) | 4 |
 | Buy / open door / revive (hold) | E or F |
 | Place a sentry turret (8,000) | T |
 | Grapple gun (once bought) | 5 |
+| Defibrillator (once bought) | 6 |
 | Players online: stats and ping | Tab |
 | Menu / settings | Esc |
 | Fullscreen | F11 |

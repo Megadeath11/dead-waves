@@ -12,14 +12,15 @@ or click "Join co-op game" and paste the code.
 Controls (defaults - change any key under Settings > Key bindings)
   WASD move, Shift sprint, Ctrl/C crouch, Space jump
   Left mouse fire, Right mouse aim (no spread: shots go exactly where the dot is)
-  R reload, 1/2/Q/mouse wheel switch gun, 3 wind charge, V knife, G grenade
-  4 third gun (Mule Kick), Enter vote to skip the break between rounds
+  R reload, 1 primary gun, 2 second primary (Mule Kick), 3 pistol, Q/mouse wheel switch gun
+  4 wind charge, V knife, G grenade, Enter vote to skip the break between rounds
   E buy / open doors / ride elevators / hold to revive, Tab scoreboard, Esc menu, F11 fullscreen
   T place a sentry turret (8,000, up to 4 each), Tab players online with stats and ping
   Jumping headshots are crits (double damage).
   Going down costs nothing. Bleeding out keeps your stuff but drops one Pack-a-Poonch tier.
   5 grapple gun (3,000 wall-buy): reel in a downed teammate, or zip to a wall.
-  Defibrillator (3,000 wall-buy): revive teammates in 1 second.
+  6 defibrillator (3,000 wall-buy): hold it out and revives take 1 second.
+  New guns always go in slot 1 (or 2 with Mule Kick); the pistol on 3 is never swapped out.
   Pack-a-Poonch tiers also double the gun's magazine and ammo each time.
   Dodgers (hooded, cyan eyes, from wave 6) sidestep when you aim at them: shoot between dodges.
 

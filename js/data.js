@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.8.0';
+DW.VERSION = '2.9.0';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -40,9 +40,12 @@ DW.WEAPONS = {
     color: [0.3, 0.3, 0.33], len: 1.1, snd: 'shot_light', splash: 0, kick: 0.5, pierce: 1 },
 };
 
-// equipment on key 3: its own slot, not a box or wall gun
+// equipment on key 4: its own slot, not a box or wall gun
 DW.WEAPONS.wind = { name: 'Wind Charge', dmg: 0, rpm: 130, auto: false, mag: 3, reserve: 0, reload: 0, ads: 0.5, pellets: 0, range: 0, cost: 0, head: 1,
   color: [0.75, 0.92, 1.0], len: 0.4, snd: 'wind', splash: 0, kick: 2.5, pierce: 0 };
+// the defibrillator is held out like the wind charge (key 6); revives done while holding it take 1 s
+DW.WEAPONS.defib = { name: 'Defibrillator', dmg: 0, rpm: 60, auto: false, mag: 1, reserve: 0, reload: 0, ads: 0, pellets: 0, range: 0, cost: 0, head: 1,
+  color: [0.85, 0.2, 0.12], len: 0.3, snd: 'hit', splash: 0, kick: 0, pierce: 0 };
 DW.WIND_CHARGES = 3;
 DW.WIND_RECHARGE = 3.0; // seconds per charge
 
@@ -63,7 +66,7 @@ DW.reserveOf = w => DW.WEAPONS[w.id].reserve * (1 << (w.pap | 0));
 // wall gear: no map letter, placed on the walls nearest the start (maps.js placeGear); each has its own hotbar slot
 DW.GEAR = {
   grapple: { name: 'Grapple Gun', short: 'GRAPPLE', cost: 3000, desc: 'Aim at a downed teammate to reel them in, or at a wall to zip over' },
-  defib: { name: 'Defibrillator', short: 'DEFIB', cost: 3000, desc: 'Revive teammates in 1 second' },
+  defib: { name: 'Defibrillator', short: 'DEFIB', cost: 3000, desc: 'Hold it out (key 6) to revive teammates in 1 second' },
 };
 DW.GRAPPLE_RANGE = 40;
 DW.GRAPPLE_CD = 4;
@@ -85,7 +88,7 @@ DW.PERKS = {
   fast: { name: 'Fast Hands', icon: 'FH', cost: 3000, color: [0.25, 0.85, 0.3], desc: 'Reload 50% faster' },
   tap: { name: 'Double Tap', icon: 'DT', cost: 2000, color: [0.95, 0.75, 0.1], desc: 'Fire rate +33%' },
   wind: { name: 'Second Wind', icon: 'SW', cost: 1500, color: [0.2, 0.55, 1.0], desc: 'Solo: self-revive once. Co-op: revive twice as fast' },
-  mule: { name: 'Mule Kick', icon: 'MK', cost: 4000, color: [0.15, 0.6, 0.25], desc: 'Carry a third gun (key 4)' },
+  mule: { name: 'Mule Kick', icon: 'MK', cost: 4000, color: [0.15, 0.6, 0.25], desc: 'Carry a second primary gun (key 2)' },
   dead: { name: 'Deadshot', icon: 'DS', cost: 3500, color: [0.55, 0.55, 0.6], desc: 'Headshots do 60% more damage' },
   stam: { name: 'Stamin-Up', icon: 'SU', cost: 2500, color: [1.0, 0.55, 0.1], desc: 'Move 20% faster' },
 };

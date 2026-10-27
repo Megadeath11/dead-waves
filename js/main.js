@@ -37,10 +37,20 @@
       if (locked && world.hud.isPaused()) world.hud.closePause();
       else if (!locked && !world.hud.isPaused() && !DW.botActive) world.hud.openPause();
     };
+    // Esc closes the pause menu on release, and only if the menu was already open when it went down:
+    // the browser also drops the mouse lock on Esc, so locking on keydown was undone at once and the menu popped back up
+    let escArm = false;
     window.addEventListener('keydown', e => {
-      if (e.code !== 'Escape') return;
+      if (e.code !== 'Escape' || e.repeat) return;
+      escArm = !!(world && !world.gameOver && world.hud.isPaused() && performance.now() - world.hud.pausedAt > 200);
+      if (world) return;
+      if (['setup', 'browse', 'leaderboard', 'stats', 'settings'].includes(current)) showScreen('main');
+      else if (current === 'lobby') { Net.leaveLobby(); showScreen('main'); }
+    });
+    window.addEventListener('keyup', e => {
+      if (e.code !== 'Escape' || !escArm) return;
+      escArm = false;
       if (world && !world.gameOver && world.hud.isPaused()) world.hud.resume();
-      else if (!world && ['setup', 'browse', 'leaderboard', 'stats', 'settings'].includes(current)) showScreen('main');
     });
 
     Net.on('lobby_updated', onLobbyUpdated);
@@ -185,7 +195,7 @@
       'Headshots while you are in the air are crits: double damage.',
       'The Mystery Box opens on wave 5. The Death Machine is its rarest prize.',
       'Pack-a-Poonch costs 20,000 for 4x damage, and can go two tiers further.',
-      `Wind charge (${K('weapon_3')}) blasts zombies back. Aim at the floor to launch yourself.`,
+      `Wind charge (${K('wind')}) blasts zombies back. Aim at the floor to launch yourself.`,
       `Sentries cost 8,000. Place up to four with ${K('sentry')}.`,
       'Max Ammo reloads every gun on the spot and tops grenades up to 4.',
       `Everyone pressing ${K('skip')} skips the break between rounds.`,
