@@ -385,7 +385,7 @@
           break;
         case 'K': case 'k': {
           const perk = def.perks[perkI++ % def.perks.length];
-          buildPerk(stat, phys, ch === 'k' ? pd : p, perk, info, faceYaw(grid, c, r, w, h, ch === 'k'));
+          buildPerk(scene, phys, ch === 'k' ? pd : p, perk, info, faceYaw(grid, c, r, w, h, ch === 'k'));
           break;
         }
         case 'W': {
@@ -509,15 +509,19 @@
     info.lamps.push({ pos: [p[0], 1.6, p[2]], color: [0.3, 0.6, 1.0], energy: 2.2, range: 6, fixed: true });
   }
 
-  function buildPerk(stat, phys, p, perk, info, yaw) {
+  // perk machines stay out of the static batch so a machine whose perk you own can fade (world.updatePerkFade)
+  function buildPerk(scene, phys, p, perk, info, yaw) {
     const pd = DW.PERKS[perk];
     phys.addBox([p[0], p[1] + 1.1, p[2]], [1.1, 2.2, 1.1], 'perk');
-    const root = M.node(stat, p, yaw);
+    const root = M.node(scene, p, yaw);
     M.perkMachine(root, pd.color, pd.name);
     M.label(root, [0, 2.75, 0], String(pd.cost), 36, M.lightened(pd.color, 0.3));
+    M.bake(root);
+    root.traverse(o => { if (o.isMesh && !o.material.map) o.receiveShadow = true; });
     const lx = p[0] - Math.sin(yaw) * 0.8, lz = p[2] - Math.cos(yaw) * 0.8;
-    info.lamps.push({ pos: [lx, p[1] + 2.4, lz], color: pd.color, energy: 1.6, range: 4.5, fixed: true });
-    info.perks.push({ pos: p, perk });
+    const lamp = { pos: [lx, p[1] + 2.4, lz], color: pd.color, energy: 1.6, range: 4.5, fixed: true };
+    info.lamps.push(lamp);
+    info.perks.push({ pos: p, perk, root, lamp, lampE: lamp.energy, fade: 1 });
   }
 
   function buildPap(stat, phys, p, info, yaw) {

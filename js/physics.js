@@ -4,6 +4,9 @@
 'use strict';
 (function () {
   const HASH = 2.0;
+  // machines, crates and posts can't be stood on: for movement they reach up forever (rays still see their real
+  // height), so anyone who jumps or wind-charges onto one slides off instead of camping where zombies can't reach
+  const SLICK = { perk: 1, pap: 1, armor: 1, ammo: 1, box: 1, crate: 1, lamp: 1, post: 1 };
 
   class Phys {
     constructor(minX, minZ, maxX, maxZ) {
@@ -20,7 +23,7 @@
       const b = {
         min: [c[0] - s[0] / 2, c[1] - s[1] / 2, c[2] - s[2] / 2],
         max: [c[0] + s[0] / 2, c[1] + s[1] / 2, c[2] + s[2] / 2],
-        active: true, tag, mark: 0,
+        active: true, tag, mark: 0, slick: !!SLICK[tag],
       };
       this.boxes.push(b);
       this._cells(b.min[0], b.min[2], b.max[0], b.max[2], list => list.push(b));
@@ -59,7 +62,7 @@
       let ground = -Infinity;
       const rr = r * 0.85;
       for (const b of this.query(p.x - rr, p.z - rr, p.x + rr, p.z + rr)) {
-        if (b.max[1] > prevY + step + 0.01) continue;
+        if (b.slick || b.max[1] > prevY + step + 0.01) continue;
         const cx = DW.clamp(p.x, b.min[0], b.max[0]), cz = DW.clamp(p.z, b.min[2], b.max[2]);
         if ((cx - p.x) ** 2 + (cz - p.z) ** 2 < rr * rr) ground = Math.max(ground, b.max[1]);
       }
@@ -76,7 +79,7 @@
       for (let it = 0; it < 3; it++) {
         let moved = false;
         for (const b of this.query(p.x - r, p.z - r, p.x + r, p.z + r)) {
-          if (b.max[1] <= y0 || b.min[1] >= y1) continue;
+          if ((b.max[1] <= y0 && !b.slick) || b.min[1] >= y1) continue;
           const cx = DW.clamp(p.x, b.min[0], b.max[0]), cz = DW.clamp(p.z, b.min[2], b.max[2]);
           let dx = p.x - cx, dz = p.z - cz;
           const d2 = dx * dx + dz * dz;

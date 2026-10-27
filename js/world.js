@@ -278,6 +278,7 @@
       this.updateSentries(dt);
       this.updatePing(dt);
       this.updateGoonFx(dt);
+      this.updatePerkFade(dt);
       this.updateFx(dt);
       if (DW.Input.justPressed('skip')) this.voteSkip();
       if (this.online) {
@@ -656,6 +657,31 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     }
 
     // Runs on every player's game: intro timing, the reveal, heartbeat, whispers, screen shake.
+    // a perk machine you own slowly fades to a faint ghost (on your screen only) and comes back if you lose the perk
+    updatePerkFade(dt) {
+      const p = this.player;
+      for (const pk of this.info.perks) {
+        if (!pk.root) continue;
+        const want = p.perks.includes(pk.perk) ? 0.12 : 1;
+        if (pk.fade === want) continue;
+        pk.fade = DW.moveToward(pk.fade, want, dt * 0.4);
+        if (!pk.mats) {
+          pk.mats = [];
+          pk.meshes = [];
+          pk.root.traverse(o => {
+            if (!o.material) return;
+            o.material = o.material.clone();
+            o.material.transparent = true;
+            pk.mats.push([o.material, o.material.opacity]);
+            if (o.isMesh && o.castShadow) pk.meshes.push(o);
+          });
+        }
+        for (const [m, op] of pk.mats) { m.opacity = op * pk.fade; m.depthWrite = pk.fade > 0.99; }
+        for (const o of pk.meshes) o.castShadow = pk.fade > 0.5;
+        pk.lamp.energy = pk.lampE * pk.fade;
+      }
+    }
+
     updateGoonFx(dt) {
       this.flicker = Math.max((this.flicker || 0) - dt, 0);
       this.camShake = Math.max((this.camShake || 0) - dt * 1.3, 0);
