@@ -1003,7 +1003,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     // ---------------------------------------------------------------- power-ups
     dropPowerup(pos, type) {
       const id = this.nextPu++;
-      const p = [pos[0], 0, pos[2]];
+      // keep the height the zombie died at: on a deck the drop used to sit at ground level, hidden inside the deck
+      const p = [pos[0], Math.max(0, +pos[1] || 0), pos[2]];
       Net.sendAll('pu', { i: id, t: type, p });
       this.spawnPu(id, type, p);
     }
@@ -1011,11 +1012,20 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     spawnPu(id, type, pos) {
       const pi = PU_INFO[type];
       const root = new THREE.Group();
-      root.position.set(pos[0], 1, pos[2]);
+      const base = +pos[1] || 0;
+      root.position.set(pos[0], base + 1, pos[2]);
       this.scene.add(root);
-      M.box(root, [0, 0, 0], [0.5, 0.5, 0.5], M.mat(pi.color, 3, 0, 1, true));
-      M.label(root, [0, 0.6, 0], pi.letter, 64, M.lightened(pi.color, 0.4), { noDepth: true });
-      this.powerups.set(id, { node: root, type, t: 26 });
+      // glowing cube with a dark frame and a see-through halo, the letter big above it and the name under that
+      const glow = M.mat(pi.color, 3, 0, 1, true);
+      M.box(root, [0, 0, 0], [0.6, 0.6, 0.6], glow);
+      for (const [x, y] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+        M.box(root, [x * 0.31, 0, y * 0.31], [0.06, 0.66, 0.06], M.mat([0.08, 0.08, 0.08], 0, 0, 1, true));
+        M.box(root, [x * 0.31, y * 0.31, 0], [0.06, 0.06, 0.66], M.mat([0.08, 0.08, 0.08], 0, 0, 1, true));
+      }
+      M.box(root, [0, 0, 0], [1.0, 1.0, 1.0], M.mat([...pi.color, 0.22], 2, 0, 1, true));
+      M.label(root, [0, 0.95, 0], pi.letter, 96, M.lightened(pi.color, 0.4), { noDepth: true, pixel: 0.006 });
+      M.label(root, [0, 0.55, 0], pi.name, 40, M.lightened(pi.color, 0.5), { noDepth: true, pixel: 0.0045 });
+      this.powerups.set(id, { node: root, type, t: 26, base });
     }
 
     updatePowerups(dt) {
@@ -1024,10 +1034,10 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         pu.t -= dt;
         const node = pu.node;
         node.rotation.y += dt * 2;
-        node.position.y = 1 + Math.sin(this.elapsed * 3) * 0.15;
+        node.position.y = (pu.base || 0) + 1 + Math.sin(this.elapsed * 3) * 0.15;
         if (pu.t < 6) node.visible = (pu.t % 0.4) > 0.15;
         if (pu.t <= 0) { this.scene.remove(node); this.powerups.delete(id); continue; }
-        if (p.alive() && Math.hypot(node.position.x - p.pos.x, node.position.z - p.pos.z) < 1.5) {
+        if (p.alive() && Math.hypot(node.position.x - p.pos.x, node.position.z - p.pos.z) < 1.5 && Math.abs((pu.base || 0) - p.pos.y) < 1.6) {
           if (this.host) this.takePu(id);
           else if (!pu.pending) { pu.pending = true; Net.sendHost('pu_take', { i: id }); }
         }
