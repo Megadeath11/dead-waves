@@ -655,8 +655,10 @@
         cyl([0, 0.067, -0.33], 0.01, 0.01, 0.2, metal, 6, x90);
         cyl([0, 0.03, -0.5], 0.01, 0.01, 0.22, metal, 6, x90);
         const mag = chalk ? metal : M.mat([0.5, 0.25, 0.1]);
-        pbox('mag', [0, -0.07, -0.13], [0.032, 0.1, 0.06], mag, [0.25, 0, 0]);
-        pbox('mag', [0, -0.155, -0.095], [0.032, 0.09, 0.06], mag, [0.5, 0, 0]);
+        // one banana mag in two joined pieces, the lower one bending on towards the muzzle
+        // (the lower piece used to sit behind the upper one, so it read as two separate mags)
+        pbox('mag', [0, -0.055, -0.13], [0.032, 0.1, 0.06], mag, [0.25, 0, 0]);
+        pbox('mag', [0, -0.141, -0.162], [0.032, 0.095, 0.06], mag, [0.5, 0, 0]);
         pbox('bolt', [0.032, 0.045, -0.03], [0.022, 0.014, 0.02], metal);
         box([0, -0.045, 0.02], [0.035, 0.1, 0.05], wood, [0.25, 0, 0]);
         box([0, 0.07, -0.58], [0.008, 0.035, 0.012], metal);

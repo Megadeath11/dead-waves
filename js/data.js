@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '3.0.0';
+DW.VERSION = '3.0.1';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -218,6 +218,14 @@ DW.loadStats = () => {
   DW.stats = DW.defaultStats();
   const s = readJSON('dw.stats');
   if (s && typeof s === 'object') Object.assign(DW.stats, s);
+  // one-time wipe of best waves and the runs list: until 2.9.1 you could stand on perk machines where nothing could
+  // reach you, so old records aren't real
+  if (!DW.stats.wiped291) {
+    DW.stats.best_wave = {};
+    DW.stats.runs = [];
+    DW.stats.wiped291 = true;
+    DW.saveStats();
+  }
 };
 DW.saveStats = () => writeJSON('dw.stats', DW.stats);
 DW.recordRun = run => {
