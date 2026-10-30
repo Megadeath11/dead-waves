@@ -97,6 +97,57 @@
   table.scores { border-collapse: collapse; font-size: 20px; }
   table.scores td { padding: 4px 40px 4px 0; }
   table.scores tr.head td { color: var(--dim); font-size: 18px; }
+  /* progression */
+  .xpbar { height: 14px; min-height: 14px; background: rgba(255,255,255,.08); border: 1px solid #3a2a26; border-radius: 2px; overflow: hidden; }
+  .xpbar > div { height: 100%; background: linear-gradient(90deg, rgb(150, 20, 14), var(--red) 70%, rgb(255, 120, 60)); }
+  .xpbar.gold > div { background: linear-gradient(90deg, rgb(160, 120, 30), var(--gold)); }
+  .progtop { display: flex; gap: 40px; align-items: center; }
+  .grow { flex: 1; min-width: 0; }
+  .progbody { flex: 1; min-height: 0; display: flex; gap: 30px; }
+  .scroll { overflow-y: auto; min-height: 0; }
+  table.ranks { border-collapse: collapse; font-size: 18px; width: 100%; }
+  table.ranks td { padding: 6px 14px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: top; }
+  table.ranks tr.head td { color: var(--dim); font-size: 16px; position: sticky; top: 0; background: rgb(14, 10, 10); }
+  table.ranks tr.lock td { color: #7d776f; }
+  table.ranks tr.cur td { background: rgba(140, 18, 12, .45); color: #fff; }
+  table.ranks td.rk { white-space: nowrap; font-weight: 700; width: 120px; }
+  table.ranks td.xp { white-space: nowrap; color: var(--dim); width: 120px; font-variant-numeric: tabular-nums; }
+  table.ranks i { color: var(--gold); font-style: normal; }
+  table.ranks tr.lock i { color: #8f7a45; }
+  .uidx { width: 470px; flex: none; }
+  .uidx .cat { font-size: 15px; letter-spacing: 3px; color: rgb(190, 60, 50); margin: 14px 0 4px; }
+  .uidx .it { display: flex; justify-content: space-between; font-size: 17px; padding: 3px 8px; }
+  .uidx .it:hover { background: rgba(255,255,255,.04); }
+  .uidx .it.lock { color: #8a847b; }
+  .uidx .it b { font-weight: 600; }
+  .chlist { display: flex; flex-direction: column; gap: 10px; width: 940px; }
+  .chcard { display: flex; align-items: center; gap: 20px; padding: 12px 18px; }
+  .chcard .grow { display: flex; flex-direction: column; gap: 6px; }
+  .chcard.done { border-color: rgb(60, 140, 60); }
+  .chcard .rw { width: 150px; text-align: right; color: var(--gold); font-size: 21px; font-weight: 600; }
+  table.medals td { text-align: center; padding: 6px 22px 6px 0; }
+  table.medals td:first-child { text-align: left; }
+  .medlegend { display: grid; grid-template-columns: 260px 1fr 140px; gap: 6px 20px; align-items: baseline; max-width: 900px; }
+  .gungrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-content: start; }
+  .guncard { display: flex; flex-direction: column; gap: 7px; padding: 12px 16px; }
+  .guncard .hd { display: flex; justify-content: space-between; align-items: baseline; }
+  .boosts { display: flex; gap: 16px; font-size: 15px; flex-wrap: wrap; }
+  .boosts .lock { color: #6d6862; }
+  .fins { display: flex; gap: 6px; flex-wrap: wrap; }
+  .finb { font: inherit; font-size: 14px; padding: 4px 10px; cursor: pointer; color: var(--bone); background: rgba(255,255,255,.06); border: 1px solid #4a3a30; border-radius: 3px; }
+  .finb:hover:not(:disabled) { border-color: var(--bone); }
+  .finb.on { border-color: var(--gold); color: var(--gold); background: rgba(255, 209, 77, .12); }
+  .finb:disabled { color: #6d6862; cursor: default; }
+  .finb .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .finb .need { font-size: 12px; }
+  .mapbtn.locked .lk { color: rgb(220, 120, 90); opacity: 1; }
+  .xpsum { display: flex; gap: 40px; margin: 10px auto 0; align-items: flex-start; justify-content: center; }
+  .xpsum .col { min-width: 360px; max-width: 470px; gap: 6px; }
+  table.xplines { font-size: 17px; border-collapse: collapse; }
+  table.xplines td { padding: 1px 24px 1px 0; }
+  table.xplines td:last-child { text-align: right; color: var(--gold); padding-right: 0; white-space: nowrap; }
+  table.xplines tr.tot td { border-top: 1px solid #4a2a26; font-weight: 700; padding-top: 5px; font-size: 19px; }
+  .xpsum .unl { font-size: 17px; color: var(--gold); max-height: 140px; overflow-y: auto; }
   .statgrid { display: grid; grid-template-columns: 260px 260px 260px 260px; gap: 10px 50px; align-items: baseline; }
   /* settings: tabs + rows */
   .settings { display: flex; flex-direction: column; gap: 0; width: 900px; }
@@ -301,6 +352,7 @@
 <script src="js/models.js"></script>
 <script src="js/physics.js"></script>
 <script src="js/maps.js"></script>
+<script src="js/progress.js"></script>
 <script src="js/net.js"></script>
 <script src="js/zombie.js"></script>
 <script src="js/player.js"></script>

@@ -811,8 +811,52 @@
     let i = 0;
     g.traverse(o => { if (o.isMesh) { o.material = mats[i % mats.length]; o.userData.noBake = true; i++; } });
   };
+  // gun mastery finishes: polished metals and an animated lava finish; parts alternate light / dark
+  let _finEnv = null;
+  function finishEnv() {
+    if (_finEnv) return _finEnv;
+    const faces = [];
+    for (let f = 0; f < 6; f++) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 32;
+      const ctx = c.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, 0, 32);
+      g.addColorStop(0, f === 2 ? '#ffffff' : '#d8d8d8');
+      g.addColorStop(0.55, '#3a3a3a');
+      g.addColorStop(1, '#8a8a8a');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 32, 32);
+      faces.push(c);
+    }
+    _finEnv = new T.CubeTexture(faces);
+    _finEnv.encoding = T.sRGBEncoding;
+    _finEnv.needsUpdate = true;
+    return _finEnv;
+  }
+  const FINISH_COLS = { copper: [[0.85, 0.42, 0.22], [0.45, 0.2, 0.1]], silver: [[0.85, 0.87, 0.9], [0.35, 0.36, 0.4]],
+    gold: [[1.0, 0.76, 0.25], [0.55, 0.38, 0.08]], inferno: [[1.0, 0.35, 0.05], [0.12, 0.04, 0.03]] };
+  const _finMats = {};
+  M.finishMats = name => {
+    if (_finMats[name]) return _finMats[name];
+    const env = finishEnv(), lava = name === 'inferno';
+    _finMats[name] = FINISH_COLS[name].map((c, i) => new T.MeshStandardMaterial({
+      color: M.color(c), metalness: lava ? 0.4 : 0.9, roughness: i ? 0.45 : 0.22, envMap: env, envMapIntensity: lava ? 0.6 : 1.4,
+      emissive: M.color(lava ? [1.0, 0.3, 0.02] : [0, 0, 0]), emissiveIntensity: lava ? (i ? 0.25 : 0.8) : 0,
+    }));
+    return _finMats[name];
+  };
+  M.finish = (g, name) => {
+    if (!FINISH_COLS[name]) return;
+    const mats = M.finishMats(name);
+    let i = 0;
+    g.traverse(o => { if (o.isMesh) { o.material = mats[i % 2]; o.userData.noBake = true; i++; } });
+  };
   // shimmer: called every frame by the world (higher tiers pulse harder)
   M.tickPap = t => {
+    if (_finMats.inferno) {
+      _finMats.inferno[0].emissiveIntensity = 0.7 + 0.5 * Math.sin(t * 3.1);
+      _finMats.inferno[1].emissiveIntensity = 0.2 + 0.2 * Math.sin(t * 5.3 + 1.2);
+    }
     for (const tier in _papMats) {
       const m = _papMats[tier], k = 0.25 + tier * 0.12;
       m[0].emissiveIntensity = 0.45 + k * Math.sin(t * (2.6 + tier * 0.5));

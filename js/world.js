@@ -50,6 +50,8 @@
       this.dropsThisWave = 0;
       this.gameOver = false;
       this.elapsed = 0;
+      this.hitSrc = new Map(); // zombie id -> what we last hit it with (for gun mastery / challenges)
+      DW.Prog.startMatch(this.mapId, DW.diffId, (t, c) => this.hud.centerMsg(t, c, 3));
       this.snapT = 0;
       this.pstateT = 0;
       this.aoes = [];
@@ -414,6 +416,7 @@
       else if (boss) this.hud.centerMsg(`WAVE ${n}\nBOSS INCOMING`, [1.0, 0.2, 0.15], 3.5);
       else this.hud.centerMsg(`WAVE ${n}`, [0.85, 0.1, 0.08], 2.5);
       if (this.player.dead) this.player.respawn(this.respawnPoint());
+      DW.Prog.onWave(n);
       if (n === DW.BOX_UNLOCK_WAVE && this.info.boxes.length) {
         DW.Models.setLabel(this.info.boxes[0].label, 'MYSTERY BOX  ' + DW.BOX_COST, [0.6, 0.85, 1.0]);
         this.hud.centerMsg(boss ? `WAVE ${n}
@@ -478,6 +481,11 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     placeSentry() {
       const p = this.player;
       if (!p.alive() || this.gameOver) return;
+      if (!DW.Prog.has('item', 'sentry')) {
+        this.hud.centerMsg(`Sentry turrets unlock at rank ${DW.Prog.req('item', 'sentry')}`, [1.0, 0.5, 0.4], 1.8);
+        DW.Sfx.play('deny');
+        return;
+      }
       if (this.mySentries() >= DW.SENTRY_MAX) {
         this.hud.centerMsg(`You already have ${DW.SENTRY_MAX} sentries out`, [1.0, 0.5, 0.4], 1.5);
         DW.Sfx.play('deny');
@@ -548,7 +556,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         const m = tu.head.userData.muzzle;
         this.tracer(tu.head.localToWorld(new THREE.Vector3(m[0], m[1], m[2])), at, false);
         Sfx.play3d('shot_light', from, -6, 1.2);
-        if (tu.owner === Net.myId) this.localHit(best, 120 + 45 * this.wave, head, false, at, false, true);
+        if (tu.owner === Net.myId) this.localHit(best, 120 + 45 * this.wave, head, false, at, false, true, 'sentry');
       }
     }
 
@@ -923,8 +931,10 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
 
     // ---------------------------------------------------------------- damage (host authority)
     // crit: jumping headshot (already multiplied by the caller). quiet: turret hits (no hit marker / sound spam)
-    localHit(z, dmg, head, knife, at, crit = false, quiet = false) {
+    // src: gun id, 'grenade' or 'sentry' (knife hits say knife)
+    localHit(z, dmg, head, knife, at, crit = false, quiet = false, src = null) {
       if (z.dead) return;
+      this.hitSrc.set(z.zid, { g: knife ? 'knife' : src || this.player.active().id, c: crit && head });
       this.player.addPoints(10);
       z.flinch(head);
       if (!quiet) {
@@ -937,12 +947,12 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       else Net.sendHost('hit', { z: z.zid, d: dmg, h: head, kn: knife });
     }
 
-    localSplash(at, radius, dmg, skip) {
+    localSplash(at, radius, dmg, skip, src) {
       this.burst(at, [0.3, 1.0, 0.5], 18, 5, 0.4);
       for (const z of [...this.zombies.values()]) {
         if (z === skip || z.dead) continue;
         const d = _a.set(z.pos.x, z.pos.y + 1, z.pos.z).distanceTo(at);
-        if (d <= radius) this.localHit(z, dmg * (1 - d / radius * 0.5), false, false, _a.clone());
+        if (d <= radius) this.localHit(z, dmg * (1 - d / radius * 0.5), false, false, _a.clone(), false, false, src);
       }
     }
 
@@ -982,6 +992,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const z = this.zombies.get(zid);
       this.zombies.delete(zid);
       const head = !!msg.h;
+      const hs = this.hitSrc.get(zid);
+      this.hitSrc.delete(zid);
       if (z) { z.die(head); this.corpses.push(z); }
       const pos = msg.p;
       this.burst(_a.set(pos[0], pos[1] + (head ? 1.7 : 1.0), pos[2]).clone(), [0.45, 0.02, 0.02], head ? 22 : 12, 4, 0.6);
@@ -989,6 +1001,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       if (msg.by === Net.myId && !msg.nk) {
         p.kills++;
         if (head) p.headshots++;
+        const src = hs || { g: msg.kn ? 'knife' : p.active().id, c: false };
+        DW.Prog.onKill(src.g, head, src.c, !!msg.b, !!msg.gl);
         this.hud.hitMarker(head, true);
         if (msg.b) { p.bosses++; p.addPoints(msg.gl ? 2500 : 500); }
         else if (msg.kn) p.addPoints(130);
@@ -1038,6 +1052,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (pu.t < 6) node.visible = (pu.t % 0.4) > 0.15;
         if (pu.t <= 0) { this.scene.remove(node); this.powerups.delete(id); continue; }
         if (p.alive() && Math.hypot(node.position.x - p.pos.x, node.position.z - p.pos.z) < 1.5 && Math.abs((pu.base || 0) - p.pos.y) < 1.6) {
+          if (!pu.counted) { pu.counted = true; DW.Prog.onEvent('powerups'); }
           if (this.host) this.takePu(id);
           else if (!pu.pending) { pu.pending = true; Net.sendHost('pu_take', { i: id }); }
         }
@@ -1098,7 +1113,8 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
 
     // ---------------------------------------------------------------- interactions
     getInteraction() {
-      const p = this.player;
+      const p = this.player, Prog = DW.Prog;
+      const locked = (kind, id, what) => ({ text: `${what}\nUnlocks at rank ${Prog.req(kind, id)}  (Progression in the main menu)`, locked: true });
       if (this.gameOver || !p.alive()) return null;
       const pp = p.pos;
       for (const [id, r] of this.remotes) {
@@ -1122,6 +1138,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
             const c2 = Math.floor(wd.cost / 2);
             return { text: `Press E for ${wd.name} ammo  [${c2}]`, cost: c2, action: () => { if (p.spend(c2)) p.giveWeapon(wb.weapon); } };
           }
+          if (!Prog.has('gun', wb.weapon)) return locked('gun', wb.weapon, `${wd.name} is locked`);
           return { text: `Press E to buy ${wd.name}  [${wd.cost}]`, cost: wd.cost, action: () => { if (p.spend(wd.cost)) p.giveWeapon(wb.weapon); } };
         }
       }
@@ -1129,6 +1146,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (Math.hypot(gb.pos[0] - pp.x, gb.pos[1] - pp.y, gb.pos[2] - pp.z) < 2.0) {
           const gd = DW.GEAR[gb.item];
           if (p[gb.item]) return { text: `You have the ${gd.name}` };
+          if (!Prog.has('gear', gb.item)) return locked('gear', gb.item, `${gd.name} is locked`);
           return { text: `Press E to buy the ${gd.name}  [${gd.cost}]\n${gd.desc}`, cost: gd.cost, action: () => { if (p.spend(gd.cost)) p.giveGear(gb.item); } };
         }
       }
@@ -1141,6 +1159,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           }
           if (this.boxState === 'rolling') return { text: 'The box is spinning...' };
           if (this.boxState === 'ready') return { text: `Press E to take ${DW.WEAPONS[this.boxChoice].name}`, action: () => this.takeBoxWeapon() };
+          if (!this.boxPool().length) return { text: 'The box has nothing left for you\nRank up to add more guns to it' };
           return { text: `Press E for a random weapon  [${DW.BOX_COST}]`, cost: DW.BOX_COST, action: () => this.buyBox() };
         }
       }
@@ -1150,6 +1169,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
           if (a.id === 'wind' || a.id === 'defib') return { text: 'The Pack-a-Poonch only takes guns' };
           const tier = a.pap | 0;
           if (tier >= 3) return { text: `Your ${wd.name} is fully Pack-a-Poonched (tier III, ${DW.PAP_DMG[3]}x damage)` };
+          if (!Prog.has('pap', tier + 1)) return locked('pap', tier + 1, `Pack-a-Poonch tier ${'I'.repeat(tier + 1)} is locked`);
           const cost = DW.PAP_COSTS[tier + 1];
           const what = tier === 0 ? 'Pack-a-Poonch' : `upgrade to tier ${'I'.repeat(tier + 1)}`;
           const look = ['', 'emerald', 'sapphire', 'amethyst & gold'][tier + 1];
@@ -1161,6 +1181,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
       for (const ar of this.info.armors) {
         if (Math.hypot(ar.pos[0] - pp.x, ar.pos[1] - pp.y, ar.pos[2] - pp.z) < 2.2) {
+          if (!Prog.has('item', 'armor')) return locked('item', 'armor', 'The armour locker is locked');
           if (p.armor >= DW.ARMOR_MAX) return { text: `Armour full (${DW.ARMOR_MAX})` };
           return {
             text: `Press E to buy armour (${DW.ARMOR_MAX})  [${DW.ARMOR_COST}]\nSoaks damage before your health`, cost: DW.ARMOR_COST,
@@ -1170,6 +1191,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
       for (const am of this.info.ammos) {
         if (Math.hypot(am.pos[0] - pp.x, am.pos[1] - pp.y, am.pos[2] - pp.z) < 2.2) {
+          if (!Prog.has('item', 'ammo')) return locked('item', 'ammo', 'The ammo resupply is locked');
           return {
             text: `Press E to refill every gun  [${DW.AMMO_COST}]`, cost: DW.AMMO_COST,
             action: () => { if (p.spend(DW.AMMO_COST)) { p.refillAll(); Sfx.play('pickup'); this.hud.centerMsg('AMMO RESUPPLIED', [1.0, 0.85, 0.4], 1.5); } },
@@ -1189,6 +1211,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       }
       for (const gb of this.info.grenadeBuys) {
         if (Math.hypot(gb.pos[0] - pp.x, gb.pos[2] - pp.z) < 2.0) {
+          if (!Prog.has('item', 'grenades')) return locked('item', 'grenades', 'The grenade wall-buy is locked');
           const need = DW.MAX_GRENADES - p.grenades;
           if (need <= 0) return { text: `Grenades full (${DW.MAX_GRENADES})` };
           const cost = need * DW.GRENADE_COST;
@@ -1202,10 +1225,11 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (Math.hypot(pk.pos[0] - pp.x, pk.pos[1] - pp.y, pk.pos[2] - pp.z) < 2.0) {
           const pd = DW.PERKS[pk.perk];
           if (p.perks.includes(pk.perk)) return { text: `You already have ${pd.name}` };
+          if (!Prog.has('perk', pk.perk)) return locked('perk', pk.perk, `${pd.name} is locked`);
           if (p.perks.length >= DW.MAX_PERKS) return { text: `You can only hold ${DW.MAX_PERKS} perks` };
           return {
             text: `Press E for ${pd.name}  [${pd.cost}]\n${pd.desc}`, cost: pd.cost,
-            action: () => { if (p.spend(pd.cost)) { p.addPerk(pk.perk); this.hud.centerMsg(pd.name.toUpperCase(), pd.color, 2); } },
+            action: () => { if (p.spend(pd.cost)) { p.addPerk(pk.perk); DW.Prog.onPerks(p.perks.length); this.hud.centerMsg(pd.name.toUpperCase(), pd.color, 2); } },
           };
         }
       }
@@ -1215,6 +1239,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
     buyDoor(i) {
       if (this.info.doors[i].open) return;
       if (this.player.spend(this.info.doors[i].cost)) {
+        DW.Prog.onEvent('doors');
         Net.sendAll('door', { i });
         this.openDoor(i);
       }
@@ -1233,10 +1258,13 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       this.navT = 0;
     }
 
+    // guns the box can give you: ones you've unlocked and don't already carry
+    boxPool() { return DW.BOX_POOL.filter(w => !this.player.hasWeapon(w) && DW.Prog.has('gun', w)); }
+
     buyBox() {
-      if (this.boxState !== 'idle' || this.wave < DW.BOX_UNLOCK_WAVE || !this.player.spend(DW.BOX_COST)) return;
+      if (this.boxState !== 'idle' || this.wave < DW.BOX_UNLOCK_WAVE || !this.boxPool().length || !this.player.spend(DW.BOX_COST)) return;
       // weighted: the big guns are rare
-      const pool = DW.BOX_POOL.filter(w => !this.player.hasWeapon(w));
+      const pool = this.boxPool();
       let total = 0;
       for (const w of pool) total += DW.BOX_WEIGHT[w] || 1;
       let roll = Math.random() * total;
@@ -1388,7 +1416,7 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
         if (z.dead) continue;
         const d = _b.set(z.pos.x, z.pos.y + 0.8, z.pos.z).distanceTo(at);
         if (d < 5.5 && this.hasLine(from, _b.set(z.pos.x, z.pos.y + 1, z.pos.z)))
-          this.localHit(z, dmg * (1 - d / 5.5 * 0.6), false, false, _b.clone());
+          this.localHit(z, dmg * (1 - d / 5.5 * 0.6), false, false, _b.clone(), false, false, 'grenade');
       }
       const p = this.player;
       if (p.pos.distanceTo(at) < 3 && this.hasLine(from, _b.set(p.pos.x, p.pos.y + 1, p.pos.z))) p.takeDamage(20, [at.x, at.y, at.z]);
@@ -1768,10 +1796,15 @@ The Mystery Box is open`, boss ? [1.0, 0.2, 0.15] : [0.6, 0.85, 1.0], 3.5);
       const run = { map: this.mapId, diff: DW.diffId, wave: this.wave, kills: p.kills, headshots: p.headshots, bosses: p.bosses, points: p.pointsEarned, downs: p.downs, revives: p.revives, time: this.elapsed, players: this.playerCount() };
       const best = DW.stats.best_wave[`${run.map}:${run.diff}`] | 0;
       DW.recordRun(run);
-      this.hud.showGameOver(why, run, this.host, run.wave > best);
+      this.hud.showGameOver(why, run, this.host, run.wave > best, DW.Prog.finishMatch(run));
     }
 
     quitMatch() {
+      // leaving early still pays XP for what you did (the run isn't recorded as a finished game)
+      if (!this.gameOver) {
+        const p = this.player;
+        DW.Prog.finishMatch({ map: this.mapId, diff: DW.diffId, wave: this.wave, kills: p.kills, headshots: p.headshots, bosses: p.bosses, points: p.pointsEarned, revives: p.revives });
+      }
       if (this.online && !this.gameOver) {
         if (this.host) Net.sendAll('over', { why: 'The host ended the match.', wave: this.wave });
         else Net.sendAll('bye', {});

@@ -19,10 +19,10 @@
       this.onFloor = false;
       this.hp = 100; this.maxHp = 100; this.regenDelay = 0; this.armor = 0;
       this.downed = false; this.dead = false; this.bleedT = 0; this.selfReviveT = 0;
-      this.points = 500; this.kills = 0; this.headshots = 0; this.bosses = 0; this.downs = 0; this.revives = 0; this.pointsEarned = 0;
+      this.points = DW.Prog.startPoints(); this.kills = 0; this.headshots = 0; this.bosses = 0; this.downs = 0; this.revives = 0; this.pointsEarned = 0;
       this.perks = [];
       const pd = DW.WEAPONS.pistol;
-      this.weapons = [{ id: 'pistol', mag: pd.mag, reserve: pd.reserve }];
+      this.weapons = [{ id: 'pistol', mag: DW.magOf({ id: 'pistol' }), reserve: DW.reserveOf({ id: 'pistol' }) }];
       this.cur = 0;
       this.downedWeapon = {};
       this.grenades = 2;
@@ -77,6 +77,11 @@
     }
     toggleWind() {
       if (this.windOut) { this.switchTo(this.cur, true); return; }
+      if (!DW.Prog.has('item', 'windcharge')) {
+        DW.Sfx.play('deny');
+        this.world.hud.centerMsg(`Wind Charge unlocks at rank ${DW.Prog.req('item', 'windcharge')}`, [1.0, 0.5, 0.4], 1.8);
+        return;
+      }
       this.windOut = true;
       this.defibOut = false;
       this.reloading = false;
@@ -393,7 +398,7 @@
       // Deadshot boosts headshots; a headshot while airborne is a crit (like a Minecraft jump crit)
       const headMult = wd.head * (this.perks.includes('dead') ? 1.6 : 1);
       const airborne = !this.onFloor;
-      let dmg = wd.dmg * mult;
+      let dmg = wd.dmg * mult * DW.Prog.dmgMult(this.active().id);
       let endT = 300;
       for (let k = 0; k < wd.pierce; k++) {
         const hit = w.raycast(from, dir, 300, excl);
@@ -404,13 +409,13 @@
           const z = hit.zombie;
           const crit = hit.head && airborne;
           const d = dmg * (hit.t <= wd.range ? 1 : 0.5) * (hit.head ? headMult : 1) * (crit ? DW.CRIT_MULT : 1);
-          w.localHit(z, d, hit.head, false, at, crit);
+          w.localHit(z, d, hit.head, false, at, crit, false, this.active().id);
           excl.add(z);
           dmg *= 0.75;
-          if (wd.splash > 0) { w.localSplash(at, wd.splash, wd.dmg * mult, z); break; }
+          if (wd.splash > 0) { w.localSplash(at, wd.splash, wd.dmg * mult, z, this.active().id); break; }
         } else {
           w.impactFx(at, hit.normal, plasma);
-          if (wd.splash > 0) w.localSplash(at, wd.splash, wd.dmg * mult, null);
+          if (wd.splash > 0) w.localSplash(at, wd.splash, wd.dmg * mult, null, this.active().id);
           break;
         }
       }
@@ -461,7 +466,7 @@
       // topping up a part-empty mag is quicker: 35% of the time is fixed, the rest scales with how much is missing
       const full = DW.magOf(w), missing = (full - w.mag) / full;
       this.reloadShells = DW.clamp(Math.round((full - w.mag) / Math.max(1, full / 6)), 1, 6);
-      this.reloadT = this.reloadTotal = wd.reload * (this.perks.includes('fast') ? 0.5 : 1) * (0.35 + 0.65 * missing);
+      this.reloadT = this.reloadTotal = wd.reload * (this.perks.includes('fast') ? 0.5 : 1) * DW.Prog.reloadMult(w.id) * (0.35 + 0.65 * missing);
       this.reloadSfx = 0;
       DW.Sfx.play('empty', -8, 0.8);
     }
@@ -565,7 +570,7 @@
       }
       // new guns only ever go in the primary slots (1, and 2 with Mule Kick); the pistol on 3 is never traded away,
       // so holding it while buying replaces the primary you last held instead of handing out a free extra gun
-      const entry = { id, mag: wd.mag, reserve: wd.reserve };
+      const entry = { id, mag: DW.magOf({ id }), reserve: DW.reserveOf({ id }) };
       const n = this.weapons.length - 1;
       if (n < this.primSlots()) {
         this.weapons.splice(n, 0, entry);
@@ -706,6 +711,9 @@
       gm.scale.setScalar(0.9);
       this.gunRoot.add(gm);
       const g = M.gun(id, false, this.active().pap | 0);
+      // gun mastery finish (the Pack-a-Poonch gem finish wins over it)
+      const fin = !(this.active().pap | 0) && DW.Prog.finishOf(id);
+      if (fin) M.finish(g, fin);
       // aim-down-sights height: the top of the gun sits just under the centre dot
       const bb = new THREE.Box3().setFromObject(g);
       this.adsY = -bb.max.y * 0.9 - 0.012;

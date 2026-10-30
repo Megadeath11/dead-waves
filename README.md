@@ -35,6 +35,9 @@ Steam shows you as playing "Spacewar". That's expected with App ID 480. Troubles
 - Partial reloads are quicker; you can steer and brake in mid-air; the Nuke pays 100 per zombie it kills, split between everyone.
 - **Co-op for up to 4**: down-and-revive, bleed-out, respawn next wave, scoreboard (Tab).
 - **Settings** in five tabs: graphics (quality presets Low-Ultra, render resolution, shadows, lamp lights, particles, anti-aliasing, brightness, FOV, FPS limit and counter), audio (master / music / effects, mute when alt-tabbed), controls (sensitivity, aim sensitivity, invert Y, toggle aim / crouch), key bindings for every action, and HUD (crosshair colour and size, hit markers, point popups, HUD size, view bob, screen shake).
+- **Progression** (Progression in the main menu): every match pays XP. 50 ranks; a new player starts with the M14, shotgun, pistol, Iron Hide, Double Tap, the Mystery Box, Outpost and Bunker, and everything else unlocks rank by rank (the AK-47 at 8, Mule Kick at 10, Deadshot at 14, the Death Machine at 30...). The Ranks tab lists every rank and what it unlocks, plus the same list by item. Prestige at rank 50 (up to 10) restarts the ranks for a badge and +10% starting points each time.
+- **Challenges**: 3 daily and 1 weekly, with XP rewards. **Map medals**: 7 per map (waves 10/20/30, boss, Goon Lord, 4 perks, wave 15 on Hardened+).
+- **Gun mastery** (Armory tab): kills level each gun to 10, with boosts at levels 3/5/7/10 (reload, magazine, reserve, damage). Kills and headshots unlock Copper, Silver, Gold and animated Inferno finishes.
 - Local stats and best runs per map and difficulty.
 - No asset files: models, textures, music and sounds are all generated in code.
 

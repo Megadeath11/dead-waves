@@ -5,12 +5,13 @@
   const UI = DW.UI, Net = DW.Net, Maps = DW.Maps;
   let renderer, canvas, world = null, screen = null, current = 'main', menuBg = null, fpsEl = null, pixelRatio = 0;
   let toastT = 0, toastEl = null, browseList = null;
-  let lbMap = 0, lbDiff = 0;
+  let lbMap = 0, lbDiff = 0, progTab = 'ranks', prestigeArm = false;
   const params = new URLSearchParams(location.search);
 
   function boot() {
     DW.loadSettings();
     DW.loadStats();
+    DW.Prog.load();
     DW.Sfx.init();
     canvas = document.getElementById('game');
     // anti-aliasing is fixed when the WebGL context is made, so that option needs a restart
@@ -44,7 +45,7 @@
       if (e.code !== 'Escape' || e.repeat) return;
       escArm = !!(world && !world.gameOver && world.hud.isPaused() && performance.now() - world.hud.pausedAt > 200);
       if (world) return;
-      if (['setup', 'browse', 'leaderboard', 'stats', 'settings'].includes(current)) showScreen('main');
+      if (['setup', 'browse', 'leaderboard', 'stats', 'settings', 'progression'].includes(current)) showScreen('main');
       else if (current === 'lobby') { Net.leaveLobby(); showScreen('main'); }
     });
     window.addEventListener('keyup', e => {
@@ -176,7 +177,7 @@
     document.getElementById('ui').appendChild(screen);
     menuBg.style.display = 'block';
     DW.Sfx.menuMusic();
-    ({ main: mainMenu, setup: setupMenu, lobby: lobbyMenu, browse: browseMenu, leaderboard: leaderboardMenu, stats: statsMenu, settings: settingsMenu })[name]();
+    ({ main: mainMenu, setup: setupMenu, lobby: lobbyMenu, browse: browseMenu, leaderboard: leaderboardMenu, stats: statsMenu, settings: settingsMenu, progression: progressionMenu })[name]();
     toastEl = UI.el('div', 'toast');
     screen.appendChild(toastEl);
   }
@@ -219,6 +220,7 @@
     const find = UI.button('Join co-op', () => { showScreen('browse'); Net.findLobbies(); }, 'mm');
     find.disabled = !Net.steamOk;
     items.push(find);
+    items.push(UI.button('Progression', () => showScreen('progression'), 'mm'));
     items.push(UI.button('Leaderboards', () => showScreen('leaderboard'), 'mm'));
     items.push(UI.button('Stats', () => showScreen('stats'), 'mm'));
     items.push(UI.button('Settings', () => showScreen('settings'), 'mm'));
@@ -231,6 +233,12 @@
     const s = DW.stats;
     const runs = s.runs || [];
     const lastRun = runs.filter(r => (r.wave | 0) > 0).pop();
+    const P = DW.Prog, pi = P.info();
+    card.appendChild(UI.el('div', 'label', 'YOUR RANK'));
+    card.appendChild(UI.el('div', 'h3 gold', `${P.badge()}  -  ${P.titleOf(pi.rank)}`));
+    card.appendChild(xpBar(pi));
+    const nx = nextUnlock(pi.rank);
+    card.appendChild(UI.el('div', 'dim small', nx || 'Everything is unlocked'));
     card.appendChild(UI.el('div', 'label', 'LAST RUN'));
     if (lastRun) {
       const m = (Maps.MAPS[lastRun.map] || { name: lastRun.map }).name;
@@ -263,12 +271,19 @@
   function mapPicker(v, editable) {
     v.appendChild(UI.el('div', 'label', 'MAP'));
     const row = UI.el('div', 'row');
+    const P = DW.Prog;
+    // a saved pick that's locked (new save, or after a prestige) falls back to the starter map / Regular
+    if (editable && !P.has('map', DW.mapId)) { DW.mapId = 'outpost'; Net.pushConfig(); }
+    if (editable && !P.has('diff', DW.diffId)) { DW.diffId = 1; Net.pushConfig(); }
     for (const m of DW.MAP_ORDER) {
       const def = Maps.MAPS[m];
       const best = DW.stats.best_wave[`${m}:${DW.diffId}`] | 0;
-      const b = UI.button('', () => { DW.mapId = m; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'mapbtn');
-      b.innerHTML = `<b>${def.name}</b><br><span>${def.desc}</span><br><span>Best wave: ${best > 0 ? best : '-'}</span>`;
-      b.disabled = !editable;
+      const open = P.has('map', m);
+      const b = UI.button('', () => { DW.mapId = m; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'mapbtn' + (open ? '' : ' locked'));
+      b.innerHTML = `<b>${def.name}</b><br><span>${def.desc}</span><br>` + (open
+        ? `<span>Best wave: ${best > 0 ? best : '-'}   Medals: ${P.medals(m).length}/${P.MEDALS.length}</span>`
+        : `<span class="lk">LOCKED - unlocks at rank ${P.req('map', m)}</span>`);
+      b.disabled = !editable || !open;
       selectedStyle(b, m === DW.mapId);
       row.appendChild(b);
     }
@@ -276,9 +291,10 @@
     v.appendChild(UI.el('div', 'label', 'DIFFICULTY'));
     const drow = UI.el('div', 'row');
     DW.DIFFS.forEach((d, i) => {
-      const b = UI.button(d.name, () => { DW.diffId = i; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'narrow');
+      const open = P.has('diff', i);
+      const b = UI.button(open ? d.name : `${d.name} (rank ${P.req('diff', i)})`, () => { DW.diffId = i; Net.pushConfig(); showScreen(current); screen.classList.add('still'); }, 'narrow');
       b.title = d.desc;
-      b.disabled = !editable;
+      b.disabled = !editable || !open;
       selectedStyle(b, i === DW.diffId);
       drow.appendChild(b);
     });
@@ -417,6 +433,181 @@
     t.innerHTML = html;
     v.appendChild(t);
     v.appendChild(UI.button('Back', () => showScreen('main'), 'narrow'));
+  }
+
+  // ---------------------------------------------------------------- progression
+  function xpBar(pi, gold) {
+    const bar = UI.el('div', 'xpbar' + (gold ? ' gold' : ''));
+    const fill = UI.el('div');
+    fill.style.width = (pi.need ? Math.round(pi.into / pi.need * 100) : 100) + '%';
+    bar.appendChild(fill);
+    return bar;
+  }
+  function nextUnlock(rank) {
+    const P = DW.Prog;
+    for (let r = rank + 1; r <= P.MAX_RANK; r++) {
+      const u = P.unlocksAt(r);
+      if (u.length) return `Next unlock at rank ${r}: ${u.map(x => P.nameOf(x[1], x[2])).join(', ')}`;
+    }
+    return '';
+  }
+
+  function progressionMenu() {
+    const P = DW.Prog, info = P.info();
+    const v = frame('PROGRESSION', 'Every match pays XP (solo or co-op, even if you quit early). Ranking up unlocks guns, perks, equipment, maps and difficulties.');
+    const top = UI.el('div', 'progtop panel');
+    const l = UI.el('div', 'col');
+    l.appendChild(UI.el('div', 'h2 gold', (P.s.prestige ? `P${P.s.prestige}  ` : '') + `RANK ${info.rank}`));
+    l.appendChild(UI.el('div', 'h3', P.titleOf(info.rank)));
+    top.appendChild(l);
+    const mid = UI.el('div', 'col grow');
+    mid.appendChild(xpBar(info));
+    mid.appendChild(UI.el('div', 'dim small', info.need
+      ? `${info.into.toLocaleString()} / ${info.need.toLocaleString()} XP to rank ${info.rank + 1}   -   ${P.s.total.toLocaleString()} XP earned in total`
+      : `Max rank   -   ${P.s.total.toLocaleString()} XP earned in total`));
+    mid.appendChild(UI.el('div', 'dim small', nextUnlock(info.rank) || 'Everything is unlocked.'));
+    top.appendChild(mid);
+    if (P.s.prestige < P.MAX_PRESTIGE) {
+      const pb = UI.button(prestigeArm ? 'Click again to confirm' : `Prestige ${P.s.prestige + 1}`, () => {
+        if (!prestigeArm) { prestigeArm = true; showScreen('progression'); screen.classList.add('still'); return; }
+        prestigeArm = false;
+        if (P.prestige()) toast(`Prestige ${P.s.prestige}! Back to rank 1 - starting points now ${P.startPoints()}.`);
+        showScreen('progression'); screen.classList.add('still');
+      }, prestigeArm ? 'narrow danger' : 'narrow');
+      pb.disabled = !P.canPrestige();
+      pb.title = `At rank ${P.MAX_RANK}: start again from rank 1 (everything locks again) for a prestige badge and +10% starting points per prestige.`;
+      top.appendChild(pb);
+    }
+    v.appendChild(top);
+
+    const tabs = UI.el('div', 'stabs');
+    for (const [id, name] of [['ranks', 'Ranks & unlocks'], ['challenges', 'Challenges'], ['medals', 'Map medals'], ['armory', 'Armory (gun mastery)']]) {
+      const t = UI.el('button', 'stab' + (progTab === id ? ' on' : ''), name);
+      t.addEventListener('click', () => { progTab = id; prestigeArm = false; showScreen('progression'); screen.classList.add('still'); });
+      tabs.appendChild(t);
+    }
+    v.appendChild(tabs);
+    const body = UI.el('div', 'progbody');
+    v.appendChild(body);
+    ({ ranks: progRanks, challenges: progChallenges, medals: progMedals, armory: progArmory })[progTab](body, info);
+    v.appendChild(UI.button('Back', () => { prestigeArm = false; showScreen('main'); }, 'narrow'));
+  }
+
+  // every rank with what it unlocks, plus the same list sorted by item so you can look up "when do I get the AK?"
+  function progRanks(body, info) {
+    const P = DW.Prog;
+    const left = UI.el('div', 'scroll grow');
+    const t = UI.el('table', 'ranks');
+    let html = '<tr class="head"><td>Rank</td><td>Total XP</td><td>Unlocks</td></tr>';
+    for (let r = 1; r <= P.MAX_RANK; r++) {
+      const what = P.unlocksAt(r).map(u => UI.esc(P.nameOf(u[1], u[2])));
+      if (P.TITLES[r]) what.push(`<i>Title: ${UI.esc(P.TITLES[r])}</i>`);
+      if (r === P.MAX_RANK) what.push('<i>Prestige</i>');
+      const cls = r === info.rank ? 'cur' : r < info.rank ? 'got' : 'lock';
+      html += `<tr class="${cls}"><td class="rk">${r <= info.rank ? '✓ ' : ''}Rank ${r}</td><td class="xp">${P.xpFor(r).toLocaleString()}</td><td>${what.join(', ') || '<span class="dim">-</span>'}</td></tr>`;
+    }
+    t.innerHTML = html;
+    left.appendChild(t);
+    body.appendChild(left);
+    const right = UI.el('div', 'scroll uidx panel');
+    right.appendChild(UI.el('div', 'h3', 'Unlocks by item'));
+    const groups = [['Guns', ['gun']], ['Perks', ['perk']], ['Equipment', ['item', 'gear']], ['Pack-a-Poonch', ['pap']], ['Maps', ['map']], ['Difficulty', ['diff']]];
+    for (const [name, kinds] of groups) {
+      right.appendChild(UI.el('div', 'cat', name.toUpperCase()));
+      for (const u of P.UNLOCKS.filter(x => kinds.includes(x[1]))) {
+        const got = info.rank >= u[0];
+        const it = UI.el('div', 'it' + (got ? '' : ' lock'));
+        it.appendChild(UI.el('span', '', (got ? '✓ ' : '') + P.nameOf(u[1], u[2]).replace(/ \((map|wall)\)$/, '')));
+        it.appendChild(UI.el('b', got ? 'gold' : '', u[0] === 1 ? 'Start' : `Rank ${u[0]}`));
+        right.appendChild(it);
+      }
+    }
+    body.appendChild(right);
+    const cur = t.querySelector('tr.cur');
+    if (cur) setTimeout(() => { left.scrollTop = Math.max(0, cur.offsetTop - left.clientHeight / 2); }, 0);
+  }
+
+  function progChallenges(body) {
+    const P = DW.Prog;
+    const col = UI.el('div', 'scroll chlist');
+    const card = (c, weekly) => {
+      const el = UI.el('div', 'chcard panel' + (c.done ? ' done' : ''));
+      const g = UI.el('div', 'grow');
+      g.appendChild(UI.el('div', 'h3', (c.done ? '✓ ' : '') + P.chText(c)));
+      g.appendChild(xpBar({ into: c.prog, need: c.target }, c.done));
+      g.appendChild(UI.el('div', 'dim small', c.done ? 'Complete' : `${c.prog.toLocaleString()} / ${c.target.toLocaleString()}`));
+      el.appendChild(g);
+      el.appendChild(UI.el('div', 'rw', `+${c.xp.toLocaleString()} XP`));
+      return el;
+    };
+    P.refreshChallenges();
+    col.appendChild(UI.el('div', 'label', `DAILY  -  new ones in ${P.timeLeft(false)}`));
+    for (const c of P.s.daily.list) col.appendChild(card(c));
+    col.appendChild(UI.el('div', 'label', `WEEKLY  -  resets in ${P.timeLeft(true)}`));
+    for (const c of P.s.weekly.list) col.appendChild(card(c, true));
+    col.appendChild(UI.el('div', 'dim small', 'Progress counts across matches. Finished challenges pay their XP at the end of the match.'));
+    body.appendChild(col);
+  }
+
+  function progMedals(body) {
+    const P = DW.Prog;
+    const col = UI.el('div', 'scroll grow');
+    const t = UI.el('table', 'scores medals');
+    let html = '<tr class="head"><td>Map</td>' + P.MEDALS.map(m => `<td>${UI.esc(m[1])}</td>`).join('') + '<td>Total</td></tr>';
+    for (const m of DW.MAP_ORDER) {
+      const got = P.medals(m), open = P.has('map', m);
+      html += `<tr><td>${UI.esc(Maps.MAPS[m].name)}${open ? '' : ` <span class="dim">(rank ${P.req('map', m)})</span>`}</td>` +
+        P.MEDALS.map(md => got.includes(md[0]) ? '<td class="gold">★</td>' : '<td class="dim">-</td>').join('') +
+        `<td class="${got.length === P.MEDALS.length ? 'gold' : ''}">${got.length}/${P.MEDALS.length}</td></tr>`;
+    }
+    t.innerHTML = html;
+    col.appendChild(t);
+    col.appendChild(UI.el('div', 'label', 'MEDALS (one of each per map, paid once)'));
+    const g = UI.el('div', 'medlegend');
+    for (const md of P.MEDALS) {
+      g.appendChild(UI.el('div', 'h3', md[1]));
+      g.appendChild(UI.el('div', 'dim', md[2]));
+      g.appendChild(UI.el('div', 'gold', `+${md[3].toLocaleString()} XP`));
+    }
+    col.appendChild(g);
+    body.appendChild(col);
+  }
+
+  // gun mastery: kills level a gun up (boosts at 3/5/7/10), kills and headshots earn finishes you can put on it
+  function progArmory(body) {
+    const P = DW.Prog;
+    const grid = UI.el('div', 'gungrid');
+    const SW = { '': '#555', copper: '#d06a38', silver: '#d8dbe2', gold: '#ffc23f', inferno: '#ff5a10' };
+    for (const id of P.GUNS) {
+      const g = P.gun(id), lv = P.gunLevel(id), wd = DW.WEAPONS[id];
+      const c = UI.el('div', 'guncard panel');
+      const hd = UI.el('div', 'hd');
+      hd.appendChild(UI.el('div', 'h3', wd.name));
+      hd.appendChild(UI.el('div', lv >= 10 ? 'gold' : 'dim', `Level ${lv}/10`));
+      c.appendChild(hd);
+      const nextK = P.LEVELS[lv];
+      c.appendChild(xpBar(nextK ? { into: g.k - P.LEVELS[lv - 1], need: nextK - P.LEVELS[lv - 1] } : { into: 1, need: 1 }, !nextK));
+      c.appendChild(UI.el('div', 'dim small', `${g.k.toLocaleString()} kills, ${g.h.toLocaleString()} headshots` +
+        (nextK ? `  -  level ${lv + 1} at ${nextK} kills` : '  -  mastered') + (P.has('gun', id) ? '' : `  -  gun unlocks at rank ${P.req('gun', id)}`)));
+      const bs = UI.el('div', 'boosts');
+      for (const b of P.BOOSTS) bs.appendChild(UI.el('span', lv >= b[0] ? 'gold' : 'lock', `${lv >= b[0] ? '✓' : 'Lv ' + b[0]} ${b[2]}`));
+      c.appendChild(bs);
+      const fins = UI.el('div', 'fins');
+      const curF = P.s.finish[id] || '';
+      for (const f of [['', 'Standard', '', () => true], ...P.FINISHES]) {
+        const ok = f[3](g);
+        const b = UI.el('button', 'finb' + (curF === f[0] && ok ? ' on' : ''));
+        b.innerHTML = `<span class="sw" style="background:${SW[f[0]]}"></span>${UI.esc(f[1])}`;
+        b.title = ok ? 'Click to use this finish' : `Needs ${f[2]} with this gun`;
+        if (!ok) b.appendChild(UI.el('span', 'need', ` - ${f[2]}`));
+        b.disabled = !ok;
+        b.addEventListener('click', () => { P.setFinish(id, f[0]); DW.Sfx.play('hit', -10, 0.6); showScreen('progression'); screen.classList.add('still'); });
+        fins.appendChild(b);
+      }
+      c.appendChild(fins);
+      grid.appendChild(c);
+    }
+    body.appendChild(grid);
   }
 
   function settingsMenu() {

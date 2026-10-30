@@ -24,6 +24,11 @@ Controls (defaults - change any key under Settings > Key bindings)
   Pack-a-Poonch tiers also double the gun's magazine and ammo each time.
   Dodgers (hooded, cyan eyes, from wave 6) sidestep when you aim at them: shoot between dodges.
 
+Progression: every match pays XP (even if you quit early). Ranks unlock guns, perks,
+equipment, maps and difficulties - Progression > Ranks & unlocks shows exactly which
+rank gives what (e.g. AK-47 at rank 8, Deadshot at 14). Also daily/weekly challenges,
+medals for each map, and gun levels with finishes in the Armory tab.
+
 Settings: graphics presets (Low to Ultra) plus render resolution, shadows, FPS limit
 and an FPS counter; separate music / effects volume; aim sensitivity, invert Y,
 toggle aim / crouch; crosshair colour and size; HUD size; view bob and screen shake.

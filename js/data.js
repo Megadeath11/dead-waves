@@ -4,7 +4,7 @@ const DW = window.DW = {};
 
 DW.APP_ID = 480; // Spacewar test app. Swap for your own app ID before release.
 DW.GAME_TAG = 'deadwaves_v1';
-DW.VERSION = '2.9.2';
+DW.VERSION = '3.0.0';
 
 DW.DIFFS = [
   { name: 'Recruit', hp: 0.7, dmg: 0.5, spd: 0.9, pts: 1.25, boss_every: 5, desc: 'Weaker, slower zombies and bonus points.' },
@@ -60,9 +60,9 @@ DW.PAP_COST = DW.PAP_COSTS[1];
 DW.ARMOR_COST = 4000;     // armour locker: soaks this much damage before health
 DW.ARMOR_MAX = 150;
 DW.AMMO_COST = 5000;      // ammo resupply: refills every gun you carry
-// Pack-a-Poonch doubles a gun's magazine and reserve every tier (x2, x4, x8)
-DW.magOf = w => DW.WEAPONS[w.id].mag * (1 << (w.pap | 0));
-DW.reserveOf = w => DW.WEAPONS[w.id].reserve * (1 << (w.pap | 0));
+// Pack-a-Poonch doubles a gun's magazine and reserve every tier (x2, x4, x8); gun mastery adds a little on top
+DW.magOf = w => Math.ceil(DW.WEAPONS[w.id].mag * (1 << (w.pap | 0)) * (DW.Prog ? DW.Prog.magMult(w.id) : 1));
+DW.reserveOf = w => Math.ceil(DW.WEAPONS[w.id].reserve * (1 << (w.pap | 0)) * (DW.Prog ? DW.Prog.reserveMult(w.id) : 1));
 // wall gear: no map letter, placed on the walls nearest the start (maps.js placeGear); each has its own hotbar slot
 DW.GEAR = {
   grapple: { name: 'Grapple Gun', short: 'GRAPPLE', cost: 3000, desc: 'Aim at a downed teammate to reel them in, or at a wall to zip over' },

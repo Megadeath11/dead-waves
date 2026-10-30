@@ -253,12 +253,14 @@
       if (n >= 2) gun('weapon_2', 1);
       else slots.push({ key: K('weapon_2'), name: '2ND GUN', sub: p.perks.includes('mule') ? 'empty' : 'Mule Kick', off: true });
       gun('weapon_3', n);
-      slots.push({ key: K('wind'), name: 'WIND', sub: `${p.wind.mag}/${DW.WIND_CHARGES}`, on: p.windOut && !p.downed, low: p.wind.mag === 0 });
+      const Prog = DW.Prog;
+      if (Prog.has('item', 'windcharge')) slots.push({ key: K('wind'), name: 'WIND', sub: `${p.wind.mag}/${DW.WIND_CHARGES}`, on: p.windOut && !p.downed, low: p.wind.mag === 0 });
+      else slots.push({ key: K('wind'), name: 'WIND', sub: `Rank ${Prog.req('item', 'windcharge')}`, off: true });
       const gcd = p.grappleCd > 0 ? Math.ceil(p.grappleCd) + 's' : 'READY';
-      slots.push({ key: K('grapple'), name: 'GRAPPLE', sub: p.grapple ? gcd : DW.GEAR.grapple.cost, off: !p.grapple, low: p.grapple && p.grappleCd > 0 });
-      slots.push({ key: K('defib'), name: 'DEFIB', sub: p.defib ? (p.defibOut ? 'IN HAND' : '1s revive') : DW.GEAR.defib.cost, off: !p.defib, on: p.defibOut && !p.downed });
+      slots.push({ key: K('grapple'), name: 'GRAPPLE', sub: p.grapple ? gcd : Prog.has('gear', 'grapple') ? DW.GEAR.grapple.cost : `Rank ${Prog.req('gear', 'grapple')}`, off: !p.grapple, low: p.grapple && p.grappleCd > 0 });
+      slots.push({ key: K('defib'), name: 'DEFIB', sub: p.defib ? (p.defibOut ? 'IN HAND' : '1s revive') : Prog.has('gear', 'defib') ? DW.GEAR.defib.cost : `Rank ${Prog.req('gear', 'defib')}`, off: !p.defib, on: p.defibOut && !p.downed });
       slots.push({ key: K('grenade'), name: 'GRENADE', sub: 'x' + p.grenades, low: p.grenades === 0 });
-      slots.push({ key: K('sentry'), name: 'SENTRY', sub: `${w.mySentries()}/${DW.SENTRY_MAX}` });
+      slots.push({ key: K('sentry'), name: 'SENTRY', sub: Prog.has('item', 'sentry') ? `${w.mySentries()}/${DW.SENTRY_MAX}` : `Rank ${Prog.req('item', 'sentry')}`, off: !Prog.has('item', 'sentry') });
       const sig = slots.map(o => [o.key, o.name, o.sub, o.on, o.off, o.low, o.pap].join(',')).join('|');
       if (sig === this.hotKey) return;
       this.hotKey = sig;
@@ -436,7 +438,7 @@
       this.world.setPaused(false);
     }
 
-    showGameOver(title, run, hostCanRestart, newBest) {
+    showGameOver(title, run, hostCanRestart, newBest, prog) {
       const w = this.world;
       if (this.pausePanel) { this.pausePanel.remove(); this.pausePanel = null; }
       this.scorePanel.style.display = 'none';
@@ -453,11 +455,36 @@
       this.fillScoreboard(t);
       panel.appendChild(t);
       if (newBest && run.wave > 0) panel.appendChild(UI.el('div', 'gold c h3', 'NEW PERSONAL BEST!'));
+      if (prog) panel.appendChild(this.xpSummary(prog));
       const row = UI.el('div', 'row center');
       row.appendChild(UI.button(DW.Net.isOnline() ? 'Back to lobby' : 'Main menu', () => w.quitMatch()));
       if (!DW.Net.isOnline()) row.appendChild(UI.button('Play again', () => w.restartSolo()));
       panel.appendChild(row);
       this.el.appendChild(op);
+    }
+
+    // XP from the match: where it came from, rank bar, anything new it unlocked
+    xpSummary(g) {
+      const P = DW.Prog, box = UI.el('div', 'xpsum');
+      const t = UI.el('table', 'xplines');
+      t.innerHTML = g.lines.map(l => `<tr><td>${UI.esc(l[0])}</td><td>+${l[1].toLocaleString()}</td></tr>`).join('') +
+        `<tr class="tot"><td>Total</td><td>+${g.total.toLocaleString()} XP</td></tr>`;
+      box.appendChild(t);
+      const col = UI.el('div', 'col');
+      const up = g.after.rank > g.before.rank;
+      col.appendChild(UI.el('div', 'h3' + (up ? ' gold' : ''), up ? `RANK UP!   ${g.before.rank}  >  ${g.after.rank}` : `RANK ${g.after.rank}  -  ${P.titleOf(g.after.rank)}`));
+      const bar = UI.el('div', 'xpbar'), fill = UI.el('div');
+      fill.style.width = (g.after.need ? Math.round(g.after.into / g.after.need * 100) : 100) + '%';
+      bar.appendChild(fill);
+      col.appendChild(bar);
+      col.appendChild(UI.el('div', 'dim small', g.after.need ? `${g.after.into.toLocaleString()} / ${g.after.need.toLocaleString()} XP to rank ${g.after.rank + 1}` : 'Max rank - you can prestige in Progression'));
+      if (g.unlocks.length) {
+        col.appendChild(UI.el('div', 'label', 'NEW UNLOCKS'));
+        col.appendChild(UI.el('div', 'unl pre', g.unlocks.join('\n')));
+      }
+      if (g.gunUps.length) col.appendChild(UI.el('div', 'dim small', 'Gun levels: ' + g.gunUps.join(', ')));
+      box.appendChild(col);
+      return box;
     }
 
     dispose() { this.el.remove(); }
